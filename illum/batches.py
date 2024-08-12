@@ -161,16 +161,14 @@ def batches(
     multival = [k for k in params if isinstance(params[k], list)]
     multival = sorted(multival, key=len, reverse=True)  # Semi-arbitrary sort
     param_space = [params[k] for k in multival]
-
-     
-
-
     N = np.prod([len(p) for p in param_space])
+
     #NOCTERRA CHANGE
     ## Create array of locations and save names
     exe_location = []
     exe_input = []
     exe_output = []
+    ###
     for param_vals in progress(product(*param_space), max_value=N):
         local_params = OrderedDict(zip(multival, param_vals))
         P = ChainMap(local_params, params)
@@ -386,7 +384,15 @@ def batches(
         
     ### NOCTERRA CHANGES   
     ### Write exes to text
-    #with open()
+    with open('exe_location.txt', 'w') as f:
+        for line in exe_location:
+            f.write(f"{line}\n")
+    with open('exe_input.txt', 'w') as f:
+        for line in exe_input:
+            f.write(f"{line}\n")
+    with open('exe_output.txt', 'w') as f:
+        for line in exe_output:
+            f.write(f"{line}\n")
     print("batches_testing")
     
     
