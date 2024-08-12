@@ -360,7 +360,7 @@ c computing the actual AOD at the wavelength lambda
 c  determine the Length of basenm
       lenbase=index(basenm,' ')-1
       mnaf=basenm(1:lenbase)//'_topogra.bin'                              ! determine the names of input and output files
-      c NEW CHANGE HERE: allow for a custom output file name
+c NEW CHANGE HERE: allow for a custom output file name
       if (iargc()<2) then
         outputfile=basenm(1:lenbase)//'.out'
       else
@@ -373,7 +373,7 @@ c  determine the Length of basenm
       pclgp=basenm(1:lenbase)//'_pcl.gplot'
 c opening output file
       open(unit=2,file=outputfile,status='unknown')
-        write(2,*) "ILLUMINA version __version__"
+        write(2,*) 'ILLUMINA version __version__'
         write(2,*) 'FILE USED:'
         write(2,*) mnaf,diffil
         print*,'Wavelength (nm):',lambda,
