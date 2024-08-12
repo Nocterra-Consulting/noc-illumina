@@ -162,7 +162,15 @@ def batches(
     multival = sorted(multival, key=len, reverse=True)  # Semi-arbitrary sort
     param_space = [params[k] for k in multival]
 
+     
+
+
     N = np.prod([len(p) for p in param_space])
+    #NOCTERRA CHANGE
+    ## Create array of locations and save names
+    exe_location = []
+    exe_input = []
+    exe_output = []
     for param_vals in progress(product(*param_space), max_value=N):
         local_params = OrderedDict(zip(multival, param_vals))
         P = ChainMap(local_params, params)
@@ -205,6 +213,13 @@ def batches(
             )
 
         unique_ID = "-".join("%s_%s" % item for item in local_params.items())
+
+        ##NOCTERRA CHANGE
+        exe_input.append(unique_ID)
+        exe_output.append(f"{exp_name}_{unique_ID}")
+        exe_location.append("%s" % os.path.abspath(fold_name))
+        ###
+
         wavelength = "%g" % P["wavelength"]
         layer = P["layer"]
         reflectance = refls[wls.index(P["wavelength"])]
@@ -336,9 +351,10 @@ def batches(
             (("", ""),),
         )
 
-        with open(fold_name + unique_ID + ".in", "w") as f:
+        with open(fold_name +   + ".in", "w") as f:
             lines = (input_line(*zip(*line_data)) for line_data in input_data)
             f.write("\n".join(lines))
+
 
         # Write execute script
         if not os.path.isfile(fold_name + "execute"):
@@ -358,7 +374,7 @@ def batches(
                 f.write("cd %s\n" % os.path.abspath(fold_name))
                 f.write(execute_str)
                 f.write("sleep 0.05\n")
-
+            
             count += 1
 
         # Add current parameters execution to execution script
@@ -367,7 +383,13 @@ def batches(
             f.write("./illumina\n")
             f.write(f"mv {exp_name}.out {exp_name}_{unique_ID}.out\n")
             f.write(f"mv {exp_name}_pcl.bin {exp_name}_pcl_{unique_ID}.bin\n")
+        
+    ### NOCTERRA CHANGES   
+    ### Write exes to text
+    with open()
 
+    
+    
     print("Final count:", count)
 
     print("Done.")
