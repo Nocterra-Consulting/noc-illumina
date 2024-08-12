@@ -384,15 +384,12 @@ def batches(
         
     ### NOCTERRA CHANGES   
     ### Write exes to text
-    with open('exe_location.txt', 'w') as f:
-        for line in exe_location:
-            f.write(f"{line}\n")
-    with open('exe_input.txt', 'w') as f:
-        for line in exe_input:
-            f.write(f"{line}\n")
-    with open('exe_output.txt', 'w') as f:
-        for line in exe_output:
-            f.write(f"{line}\n")
+    with open('execute_info.txt', 'w') as f:
+        for loc, input, output in zip(exe_location, exe_input, exe_output):
+            input = input+'.in'
+            output = output+'.out'
+            f.write(f"{loc},{input},{output}\n")
+
     print("batches_testing")
     
     
