@@ -77,9 +77,10 @@ c
       integer verbose                                                     ! verbose = 1 to have more print out, 0 for silent
       parameter (pi=3.141592654)
       parameter (pix4=4.*pi)
+      character(200) arg1,arg2                                            ! NEW CHANGE: CLI added to allow for custom in/outs
+      character(200) inputfile,outputfile                                       ! NEW CHANGE: variable for inputfile and outputfiles
       character*72 mnaf                                                   ! Terrain elevation file
       character*72 diffil                                                 ! Aerosol file
-      character*72 outfile                                                ! Results file
       character*72 pclf,pclgp                                             ! Files containing contribution and sensitivity maps
       character*72 pclimg,pcwimg
       character*72 basenm                                                 ! Base name of files
@@ -269,9 +270,15 @@ c                                                                         ! a li
       if (verbose.ge.1) then
         print*,'Starting ILLUMINA computations...'
       endif
-c reading of the fichier d'entree (illumina.in)
-      print*,'Reading illumina.in input file'
-      open(unit=1,file='illumina.in',status='old')
+c NEW CHANGE HERE: allow a custom named input file to be given as CLI arguement
+      if (iargc()<1) then
+        inputfile='illumina.in'
+      else
+        call getarg(1,arg1)
+        read(arg1,*)inputfile
+      endif
+      print*,'Reading illumina input file', inputfile
+      open(unit=1,file=inputfile,status='old')
         read(1,*)
         read(1,*) basenm
         read(1,*) dx,dy
@@ -353,13 +360,19 @@ c computing the actual AOD at the wavelength lambda
 c  determine the Length of basenm
       lenbase=index(basenm,' ')-1
       mnaf=basenm(1:lenbase)//'_topogra.bin'                              ! determine the names of input and output files
-      outfile=basenm(1:lenbase)//'.out'
+      c NEW CHANGE HERE: allow for a custom output file name
+      if (iargc()<2) then
+        outputfile=basenm(1:lenbase)//'.out'
+      else
+        call getarg(2,arg2)
+        read(arg2,*)outputfile
+      endif 
       pclf=basenm(1:lenbase)//'_pcl.txt'
       pclimg=basenm(1:lenbase)//'_pcl.bin'
       pcwimg=basenm(1:lenbase)//'_pcw.bin'
       pclgp=basenm(1:lenbase)//'_pcl.gplot'
 c opening output file
-      open(unit=2,file=outfile,status='unknown')
+      open(unit=2,file=outputfile,status='unknown')
         write(2,*) "ILLUMINA version __version__"
         write(2,*) 'FILE USED:'
         write(2,*) mnaf,diffil

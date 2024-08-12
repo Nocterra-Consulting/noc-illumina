@@ -351,7 +351,7 @@ def batches(
             (("", ""),),
         )
 
-        with open(fold_name +   + ".in", "w") as f:
+        with open(fold_name + unique_ID + ".in", "w") as f:
             lines = (input_line(*zip(*line_data)) for line_data in input_data)
             f.write("\n".join(lines))
 
@@ -386,8 +386,8 @@ def batches(
         
     ### NOCTERRA CHANGES   
     ### Write exes to text
-    with open()
-
+    #with open()
+    print("batches_testing")
     
     
     print("Final count:", count)
