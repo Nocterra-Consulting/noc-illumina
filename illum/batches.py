@@ -198,6 +198,7 @@ def batches(
     #     param_generate(param_vals)
     ### NOCTERRA CHANGES   
     ### Write exes to text
+    exe_input, exe_output, exe_location = results[0], results[1], results[2]
     with open('execute_info.txt', 'w') as f:
         for loc, input, output in zip(exe_location, exe_input, exe_output):
             input = input+'.in'
@@ -308,7 +309,7 @@ def param_generate(local_params, multival, params, brng, compact, dir_name, wls,
             f.write("./illumina\n")
             f.write(f"mv {exp_name}.out {exp_name}_{unique_ID}.out\n")
             f.write(f"mv {exp_name}_pcl.bin {exp_name}_pcl_{unique_ID}.bin\n")
-        return None
+        return [exe_input, exe_output, exe_location]
 
 def create_illumina_in(exp_name, layer, ds, P, wavelength, reflectance, bandwidth, lamps, bearing):
     # Create illumina.in
