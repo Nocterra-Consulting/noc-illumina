@@ -24,6 +24,7 @@ from illum import MultiScaleData as MSD
 from illum.pytools import save_bin
 import multiprocessing as mp
 import tqdm as tqdm
+import time as time
 
 progress = partial(progressbar, redirect_stdout=True)
 
@@ -167,26 +168,42 @@ def batches(
     param_space = [params[k] for k in multival]
     N = np.prod([len(p) for p in param_space])
 
-    #NOCTERRA CHANGE
-    ## Create array of locations and save names
-    exe_location = []
-    exe_input = []
-    exe_output = []
-    ###
     
     # Create all possible combinations of parameters
     param_vals = list(product(*param_space))
     #args_list = list(zip(prod_params, func_array))
     #print(args_list)
+    param_tasks = [OrderedDict(zip(multival, vals)) for vals in param_vals]
+    const_args = [multival, brng, compact, dir_name, wls, 
+                   refls, spectral_bands, lamps,  exp_name]
+    const_str = ['multival', 'brng', 'compact', 'dir_name', 'wls', 
+                 'refls', 'spectral_bands', 'lamps', 'exp_name']
+    const_dict = dict(zip(const_str, const_args))
+    # write to file yaml
+    with open('const_params.yml', 'w') as f:
+        yaml.dump(const_dict, f)
+    # args_list = [(local_params, multival, params, brng, compact, dir_name, wls, 
+    #                refls, spectral_bands, lamps,exp_name, ds) for local_params in param_tasks]
+    time_one = time.time()
+    # Setup folders
+    folder_setup(param_vals, params, multival, brng, compact, dir_name, exp_name)
+    time_two = time.time()
+    print('Time to setup folders:', time_two-time_one)
 
+    # write args_list to file
+    print('Writing to file')
+    with open('param_vals.txt', 'w') as f:
+        for item in param_vals:
+            f.write(f"{item}\n")
+    with open('const_params.txt', 'w') as f:
+            f.write(f"{const_args}")
+    print('Done writing to file')
+    
+    return
     num_cpus = 20
     # Run multithreaded execution with a progress bar
     results = []
     with mp.Pool(processes=num_cpus) as pool:
-        param_tasks = [OrderedDict(zip(multival, vals)) for vals in param_vals]
-        args_list = [(local_params, multival, params, brng, compact, dir_name, wls, 
-                   refls, spectral_bands, lamps, exe_location, exe_input, 
-                   exe_output, exp_name, ds) for local_params in param_tasks]
         results = np.array(list(tqdm.tqdm(
             pool.imap(execute_wrapper, args_list),
             total=N,
@@ -198,15 +215,6 @@ def batches(
     #     param_generate(param_vals)
     ### NOCTERRA CHANGES   
     ### Write exes to text
-    exe_input, exe_output, exe_location = results[0], results[1], results[2]
-    with open('execute_info.txt', 'w') as f:
-        for loc, input, output in zip(exe_location, exe_input, exe_output):
-            input = input+'.in'
-            output = output+'.out'
-            f.write(f"{loc},{input},{output}\n")
-
-    print("batches_testing")
-    
     
     #print("Final count:", count)
 
@@ -215,16 +223,23 @@ def batches(
 def execute_wrapper(args: tuple) -> np.ndarray:
     """Wrapper to allow multiprocessing arguments to feed into execution."""
     return param_generate(*args)
-def param_generate(local_params, multival, params, brng, compact, dir_name, wls, 
-                   refls, spectral_bands, lamps, exe_location, exe_input, exe_output, 
-                   exp_name, ds):
+
+def folder_setup(param_values, params, multival, brng, compact, dir_name, exp_name):
+    print('folder setup')
+    #NOCTERRA CHANGE
+    ## Create array of locations and save names
+    exe_location = []
+    exe_input = []
+    exe_output = []
+    for param_vals in param_values:
+        local_params = OrderedDict(zip(multival, param_vals))
         P = ChainMap(local_params, params)
         if (
             "azimuth_angle" in multival
             and P["elevation_angle"] == 90
             and params["azimuth_angle"].index(P["azimuth_angle"]) != 0
         ):
-           return
+            continue
 
         if os.path.isfile("brng.lst"):
             obs_index = (
@@ -258,13 +273,30 @@ def param_generate(local_params, multival, params, brng, compact, dir_name, wls,
             )
 
         unique_ID = "-".join("%s_%s" % item for item in local_params.items())
+        wavelength = "%g" % P["wavelength"]
+        layer = P["layer"]
+        reflectance = refls[wls.index(P["wavelength"])]
+        bandwidth = spectral_bands[wls.index(P["wavelength"]), 1]
+        create_symlinks(fold_name, params, exp_name, coords, layer, lamps, wavelength)
 
         ##NOCTERRA CHANGE
         exe_input.append(unique_ID)
         exe_output.append(f"{exp_name}_{unique_ID}")
         exe_location.append("%s" % os.path.abspath(fold_name))
-        ###
+        #print(unique_ID)
+        ### NOCTERRA CHANGES
+    print('finished loop')
+    with open('execute_info.txt', 'w') as f:
+        for loc, input, output in zip(exe_location, exe_input, exe_output):
+            input = input+'.in'
+            output = output+'.out'
+            f.write(f"{loc},{input},{output}\n")
+    return exe_location, exe_input, exe_output
 
+def param_generate(local_params, multival, params, brng, compact, dir_name, wls, 
+                   refls, spectral_bands, lamps, exe_location, exe_input, exe_output, 
+                   exp_name, ds):
+        P = ChainMap(local_params, params)
         wavelength = "%g" % P["wavelength"]
         layer = P["layer"]
         reflectance = refls[wls.index(P["wavelength"])]
@@ -309,7 +341,7 @@ def param_generate(local_params, multival, params, brng, compact, dir_name, wls,
             f.write("./illumina\n")
             f.write(f"mv {exp_name}.out {exp_name}_{unique_ID}.out\n")
             f.write(f"mv {exp_name}_pcl.bin {exp_name}_pcl_{unique_ID}.bin\n")
-        return [exe_input, exe_output, exe_location]
+    # return [exe_input, exe_output, exe_location]
 
 def create_illumina_in(exp_name, layer, ds, P, wavelength, reflectance, bandwidth, lamps, bearing):
     # Create illumina.in
