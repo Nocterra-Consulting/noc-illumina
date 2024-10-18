@@ -10,14 +10,14 @@
 import os
 import shutil
 from collections import ChainMap, OrderedDict
-from functools import partial
+
 from glob import glob
 from itertools import product
 
 import click
 import numpy as np
 import yaml
-from progressbar import progressbar
+
 
 import illum
 from illum import MultiScaleData as MSD
@@ -26,6 +26,8 @@ import multiprocessing as mp
 import tqdm as tqdm
 import time as time
 
+from functools import partial
+from progressbar import progressbar
 progress = partial(progressbar, redirect_stdout=True)
 
 
@@ -204,7 +206,11 @@ def batches(
     # Run multithreaded execution with a progress bar
     results = []
     with mp.Pool(processes=num_cpus) as pool:
-        results = np.array(list(tqdm.tqdm(
+        param_tasks = [OrderedDict(zip(multival, vals)) for vals in param_vals]
+        args_list = [(local_params, multival, params, brng, compact, dir_name, wls, 
+                   refls, spectral_bands, lamps, exe_location, exe_input, 
+                   exe_output, exp_name, ds) for local_params in param_tasks]
+        results = np.array(list(progress(
             pool.imap(execute_wrapper, args_list),
             total=N,
             desc="Processing"
@@ -215,6 +221,15 @@ def batches(
     #     param_generate(param_vals)
     ### NOCTERRA CHANGES   
     ### Write exes to text
+    exe_input, exe_output, exe_location = results[0], results[1], results[2]
+    with open('execute_info.txt', 'w') as f:
+        for loc, input, output in zip(exe_location, exe_input, exe_output):
+            input = input+'.in'
+            output = output+'.out'
+            f.write(f"{loc},{input},{output}\n")
+
+    print("batches_testing")
+    
     
     #print("Final count:", count)
 
