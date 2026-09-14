@@ -82,6 +82,18 @@ c
       character(200) resfile                                              ! machine-readable result record (<root>_result.txt)
       integer lenout                                                      ! length of the output file name
       real azimgeo                                                        ! geographic viewing azimuth as read from the parameter file (deg)
+      character(200) arg3                                                 ! third CLI argument: angles list file
+      character(200) anglesfile                                           ! path of the angles list file (optional argument 3)
+      character(200) outroot                                              ! output name without the trailing '.out'
+      character(200) outfile                                              ! .out file of the current pointing
+      character(200) allres                                               ! combined result record (<root>_results.txt)
+      character(200) aline                                                ! one line of the angles list file
+      character(32) etag,atag                                             ! angle tags used in the output file names
+      integer lenroot,letag,latag                                         ! string lengths
+      integer npts,ipt                                                    ! number of pointings, pointing counter
+      integer ios,lkind                                                   ! I/O status, kind of an angles file line
+      real elev1,azim1                                                    ! one pointing read from the angles file
+      real, allocatable :: elevs(:),azims(:)                              ! pointings: elevation and geographic azimuth (deg)
       character*72 mnaf                                                   ! Terrain elevation file
       character*72 diffil                                                 ! Aerosol file
       character*72 pclf,pclgp                                             ! Files containing contribution and sensitivity maps
@@ -309,30 +321,72 @@ c NEW CHANGE HERE: allow a custom named input file to be given as CLI arguement
         read(1,*) cloudt, cloudbase, cloudfrac
         read(1,*)
       close(1)
-      if (angvis.gt.90.) then
-         print*,'Error: elevation angle larger than 90 deg'
-         stop
+c NEW CHANGE HERE: optional third argument = angles list file. One
+c pointing per line 'elevation_deg azimuth_deg' (geographic azimuth,
+c the convention of the parameter file). Blank lines and lines that
+c start with '#' are skipped. Without that argument the single
+c pointing of the parameter file forms a list of length 1.
+      if (iargc()<3) then
+        anglesfile=' '
+        npts=1
+        allocate(elevs(npts),azims(npts))
+        elevs(1)=angvis
+        azims(1)=azim
+      else
+        call getarg(3,arg3)
+        anglesfile=adjustl(arg3)
+        open(unit=1,file=anglesfile,status='old',iostat=ios)
+        if (ios.ne.0) then
+          print*,'Error: cannot open angles file ',trim(anglesfile)
+          stop
+        endif
+c first pass: count the pointings
+        npts=0
+        do
+          read(1,'(A)',iostat=ios) aline
+          if (ios.ne.0) exit
+          call angline(aline,lkind,elev1,azim1)
+          if (lkind.eq.2) then
+            print*,'Error: cannot parse angles file line: ',
+     +      trim(aline)
+            stop
+          endif
+          if (lkind.eq.1) npts=npts+1
+        enddo
+        close(1)
+        if (npts.lt.1) then
+          print*,'Error: no pointing found in angles file ',
+     +    trim(anglesfile)
+          stop
+        endif
+c second pass: store the pointings
+        allocate(elevs(npts),azims(npts))
+        open(unit=1,file=anglesfile,status='old')
+        ipt=0
+        do
+          read(1,'(A)',iostat=ios) aline
+          if (ios.ne.0) exit
+          call angline(aline,lkind,elev1,azim1)
+          if (lkind.eq.1) then
+            ipt=ipt+1
+            elevs(ipt)=elev1
+            azims(ipt)=azim1
+          endif
+        enddo
+        close(1)
       endif
-      if (angvis.lt.-90.) then
-         print*,'Error: elevation angle smaller than -90 deg'
-         stop
-      endif
-c conversion of the geographical viewing angles toward the cartesian
-c angle we assume that the angle in the file illumina.in
-c is consistent with the geographical definition
-c geographical, azim=0 toward north, 90 toward east, 180 toward south
-c etc
-c cartesian, azim=0 toward east, 90 toward north, 180 toward west etc
-      azimgeo=azim
-      azim=90.-azim
-      if (azim.lt.0.) azim=azim+360.
-      if (azim.ge.360.) azim=azim-360.
-      angvi1 = (pi*angvis)/180.
-      angze1 = pi/2.-angvi1
-      angaz1 = (pi*azim)/180.
-      ix = ( sin((pi/2.)-angvi1) ) * (cos(angaz1))                        ! viewing vector components
-      iy = ( sin((pi/2.)-angvi1) ) * (sin(angaz1))
-      iz = (sin(angvi1))
+      do ipt=1,npts
+        if (elevs(ipt).gt.90.) then
+          print*,'Error: elevation angle larger than 90 deg',
+     +    ' at pointing',ipt,elevs(ipt)
+          stop
+        endif
+        if (elevs(ipt).lt.-90.) then
+          print*,'Error: elevation angle smaller than -90 deg',
+     +    ' at pointing',ipt,elevs(ipt)
+          stop
+        endif
+      enddo
       dfov=(dfov*pi/180.)/2.
       siz=2500.
       if (ssswit.eq.0) then
@@ -398,32 +452,32 @@ c NEW CHANGE HERE: allow for a custom output file name
       pclimg=basenm(1:lenbase)//'_pcl.bin'
       pcwimg=basenm(1:lenbase)//'_pcw.bin'
       pclgp=basenm(1:lenbase)//'_pcl.gplot'
-c opening output file
-      open(unit=2,file=outputfile,status='unknown')
-        write(2,*) 'ILLUMINA version __version__'
-        write(2,*) 'FILE USED:'
-        write(2,*) mnaf,diffil
-        print*,'Wavelength (nm):',lambda,
-     +       ' Aerosol optical depth:',taua
-        write(2,*) 'Wavelength (nm):',lambda,
-     +       ' Aerosol optical depth:',taua
-        write(2,*) '2nd order scattering radius:',effdif,' m'
-        print*,'2nd order scattering radius:',effdif,' m'
-        write(2,*) 'Observer position (x,y,z)',x_obs,y_obs,z_o
-        print*,'Observer position (x,y,z)',x_obs,y_obs,z_o
-        write(2,*) 'Elevation angle:',angvis,' azim angle (counterclockwise
-     +from east)',azim
-        print*,'Elevation angle:',angvis,' azim angle (counterclockwise
-     +from east)',azim
+c root of the output names = output file name without a trailing '.out'
+      lenout=len_trim(outputfile)
+      if ((lenout.gt.4).and.(outputfile(lenout-3:lenout).eq.'.out'))
+     +then
+        lenroot=lenout-4
+      else
+        lenroot=lenout
+      endif
+      outroot=outputfile(1:lenroot)
+      allres=outroot(1:lenroot)//'_results.txt'
+      print*,'Parameter file: ',trim(inputfile)
+      print*,'Output file: ',trim(outputfile)
+      if (anglesfile.eq.' ') then
+        print*,'Angles file: none (pointing of the parameter file)'
+      else
+        print*,'Angles file: ',trim(anglesfile)
+      endif
+      print*,'Number of pointings:',npts
+      print*,'Combined result file: ',trim(allres)
+c combined result record, one block per pointing, overwritten on re-run
+      open(unit=4,file=allres,status='unknown')
 c Initialisation of the arrays and variables
         if (verbose.ge.1) print*,'Initializing variables...'
         if (cloudt.eq.0) then
           cloudbase=1000000000.
         endif
-        prmaps=1
-        iun=0
-        ideux=1
-        icloud=0.
         do i=1,nbx
           do j=1,nby
             val2d(i,j)=0.
@@ -433,16 +487,10 @@ c Initialisation of the arrays and variables
             ofill(i,j)=0.
             inclix(i,j)=0.
             incliy(i,j)=0.
-            lpluto(i,j)=0.
-            ITC(i,j)=0.
-            FTC(i,j)=0.
-            FCA(i,j)=0.
-            flcld(i,j)=0.
             drefle(i,j)=0.
             lampal(i,j)=0.
             do k=1,ntype
               lamplu(i,j,k)=0.
-              ITT(i,j,k)=0.
             enddo
           enddo
         enddo
@@ -464,37 +512,7 @@ c Initialisation of the arrays and variables
             zondif(i,j)=1.
           enddo
         enddo
-        idif1=0.
-        idif2=0.
-        fdif2=0
-        idif2p=0.
-        fldir=0.
-        flindi=0.
-        fldiff=0.
-        pdifdi=0.
-        pdifin=0.
-        pdifd1=0.
-        pdifd2=0.
-        intdir=0.
-        intind=0.
-        idiff2=0.
-        angmin=0.
-        isourc=0.
-        itotty=0.
-        itotci=0.
-        itotrd=0.
-        flcib=0.
-        flrefl=0.
-        irefl=0.
-        irefl1=0.
-        fldif1=0.
-        fldif2=0.
-        portio=0.
-        fccld=0.
-        fctcld=0.
-        ometif=0.
         omefov=0.
-        hh=1.
 c determine the 2nd scattering zone
         if (ssswit.ne.0) then
           call zone_diffusion(effdif,
@@ -697,16 +715,131 @@ c flux arrays (lumlp)
         if (z_obs.eq.0.) z_obs=0.001
         largx=dx*real(nbx)                                                ! computation of the Width along x of the case.
         largy=dy*real(nby)                                                ! computation of the Width along y of the case.
+c=======================================================================
+c     Loop over the pointings. Everything above this line is angle
+c     independent and runs once per process.
+c=======================================================================
+      do ipt=1,npts
+        angvis=elevs(ipt)
+        azim=azims(ipt)
+        if (angvis.gt.90.) then
+           print*,'Error: elevation angle larger than 90 deg'
+           stop
+        endif
+        if (angvis.lt.-90.) then
+           print*,'Error: elevation angle smaller than -90 deg'
+           stop
+        endif
+c conversion of the geographical viewing angles toward the cartesian
+c angle we assume that the angle in the file illumina.in
+c is consistent with the geographical definition
+c geographical, azim=0 toward north, 90 toward east, 180 toward south
+c etc
+c cartesian, azim=0 toward east, 90 toward north, 180 toward west etc
+      azimgeo=azim
+      azim=90.-azim
+      if (azim.lt.0.) azim=azim+360.
+      if (azim.ge.360.) azim=azim-360.
+      angvi1 = (pi*angvis)/180.
+      angze1 = pi/2.-angvi1
+      angaz1 = (pi*azim)/180.
+      ix = ( sin((pi/2.)-angvi1) ) * (cos(angaz1))                        ! viewing vector components
+      iy = ( sin((pi/2.)-angvi1) ) * (sin(angaz1))
+      iz = (sin(angvi1))
+c output file names of this pointing
+        if (npts.eq.1) then
+          outfile=outputfile
+          resfile=outroot(1:lenroot)//'_result.txt'
+        else
+          call angtag(angvis,etag,letag)
+          call angtag(azimgeo,atag,latag)
+          outfile=outroot(1:lenroot)//'_e'//etag(1:letag)//'_a'//
+     +    atag(1:latag)//'.out'
+          pclimg=outroot(1:lenroot)//'_e'//etag(1:letag)//'_a'//
+     +    atag(1:latag)//'_pcl.bin'
+          resfile=outroot(1:lenroot)//'_e'//etag(1:letag)//'_a'//
+     +    atag(1:latag)//'_result.txt'
+        endif
+        print*,'Pointing',ipt,' of',npts,': elevation',angvis,
+     +  ' azimuth',azimgeo
+        print*,'Output file: ',trim(outfile)
+c opening output file
+      open(unit=2,file=outfile,status='unknown')
+        write(2,*) 'ILLUMINA version __version__'
+        write(2,*) 'FILE USED:'
+        write(2,*) mnaf,diffil
+        print*,'Wavelength (nm):',lambda,
+     +       ' Aerosol optical depth:',taua
+        write(2,*) 'Wavelength (nm):',lambda,
+     +       ' Aerosol optical depth:',taua
+        write(2,*) '2nd order scattering radius:',effdif,' m'
+        print*,'2nd order scattering radius:',effdif,' m'
+        write(2,*) 'Observer position (x,y,z)',x_obs,y_obs,z_o
+        print*,'Observer position (x,y,z)',x_obs,y_obs,z_o
+        write(2,*) 'Elevation angle:',angvis,' azim angle (counterclockwise
+     +from east)',azim
+        print*,'Elevation angle:',angvis,' azim angle (counterclockwise
+     +from east)',azim
         write(2,*) 'Width of the domain [NS](m):',largx,'#cases:',nbx
         write(2,*) 'Width of the domain [EO](m):',largy,'#cases:',nby
         write(2,*) 'Size of a cell (m):',dx,' X ',dy
         write(2,*) 'latitu center:',latitu
-
-
-
-
-
-
+c Initialisation of the per-pointing accumulators, arrays and variables
+        prmaps=1
+        iun=0
+        ideux=1
+        icloud=0.
+        do i=1,nbx
+          do j=1,nby
+            lpluto(i,j)=0.
+            ITC(i,j)=0.
+            FTC(i,j)=0.
+            FCA(i,j)=0.
+            flcld(i,j)=0.
+            do k=1,ntype
+              ITT(i,j,k)=0.
+            enddo
+          enddo
+        enddo
+        idif1=0.
+        idif2=0.
+        fdif2=0
+        idif2p=0.
+        fldir=0.
+        flindi=0.
+        fldiff=0.
+        pdifdi=0.
+        pdifin=0.
+        pdifd1=0.
+        pdifd2=0.
+        intdir=0.
+        intind=0.
+        idiff2=0.
+        angmin=0.
+        isourc=0.
+        itotty=0.
+        itotci=0.
+        itotrd=0.
+        flcib=0.
+        flrefl=0.
+        irefl=0.
+        irefl1=0.
+        fldif1=0.
+        fldif2=0.
+        portio=0.
+        fccld=0.
+        fctcld=0.
+        ometif=0.
+        hh=1.
+        ff=0.
+        ff2=0.
+        volu=0.
+        itotind=0.
+        itodif=0.
+        fcapt=0.
+        ftocap=0.
+        scal=19.
+        scalo=scal
         direct=0.                                                         ! initialize the total direct radiance from sources to observer
         rdirect=0.                                                        ! initialize the total reflected radiance from surface to observer
         irdirect=0.                                                       ! initialize the total direct irradiance from sources to observer
@@ -2019,15 +2152,8 @@ c =================================
         write(2,*) '         Diffuse radiance (W/str/m**2/nm)          '
         write(2,2001) (ftocap+fctcld)/omefov/(pi*(diamobj/2.)**2.)
       close(2)
-c machine-readable result record: <root>_result.txt where <root> is
-c the output file name without a trailing '.out'
-      lenout=len_trim(outputfile)
-      if ((lenout.gt.4).and.(outputfile(lenout-3:lenout).eq.'.out'))
-     +then
-        resfile=outputfile(1:lenout-4)//'_result.txt'
-      else
-        resfile=outputfile(1:lenout)//'_result.txt'
-      endif
+c machine-readable result record of this pointing (<root>_result.txt or
+c <root>_e<elev>_a<azim>_result.txt) and the combined record (unit 4)
       open(unit=3,file=resfile,status='unknown')
         write(3,2002) 'elevation_deg',angvis
         write(3,2002) 'azimuth_deg',azimgeo
@@ -2041,9 +2167,88 @@ c the output file name without a trailing '.out'
         write(3,2002) 'diffuse_radiance',
      +  (ftocap+fctcld)/omefov/(pi*(diamobj/2.)**2.)
       close(3)
+        if (ipt.gt.1) write(4,*)
+        write(4,2002) 'elevation_deg',angvis
+        write(4,2002) 'azimuth_deg',azimgeo
+        write(4,2002) 'wavelength_nm',lambda
+        write(4,2002) 'direct_irradiance_sources',irdirect
+        write(4,2002) 'direct_irradiance_reflection',irrdirect
+        write(4,2002) 'direct_radiance_sources',direct
+        write(4,2002) 'direct_radiance_reflection',rdirect
+        write(4,2002) 'cloud_radiance',
+     +  fctcld/omefov/(pi*(diamobj/2.)**2.)
+        write(4,2002) 'diffuse_radiance',
+     +  (ftocap+fctcld)/omefov/(pi*(diamobj/2.)**2.)
+      enddo                                                               ! end of the loop over the pointings
+      close(4)
  2002 format(A,'=',ES14.6E2)
  2001 format('                   ',E10.3E2)
       stop
+      end
+c***********************************************************************
+c     angline: classify one line of the angles list file.
+c     lkind=0 blank or comment line, lkind=1 valid pointing (elev,azi
+c     set), lkind=2 line that cannot be parsed.
+c***********************************************************************
+      subroutine angline(aline,lkind,elev,azi)
+      implicit none
+      character*(*) aline
+      integer lkind
+      real elev,azi
+      character(200) buf
+      integer ios,l
+      buf=aline
+      l=len_trim(buf)
+      if (l.gt.0) then
+        if (buf(l:l).eq.char(13)) buf(l:l)=' '
+      endif
+      buf=adjustl(buf)
+      if (len_trim(buf).eq.0) then
+        lkind=0
+      elseif (buf(1:1).eq.'#') then
+        lkind=0
+      else
+        read(buf,*,iostat=ios) elev,azi
+        if (ios.ne.0) then
+          lkind=2
+        else
+          lkind=1
+        endif
+      endif
+      return
+      end
+c***********************************************************************
+c     angtag: format an angle for a file name. F0.1, then '.' -> 'p',
+c     a leading '-' -> 'm', a leading '.' -> '0.' (gfortran prints
+c     0.0 as .0). Example: -5.0 -> m5p0, 350.0 -> 350p0, 0.0 -> 0p0.
+c***********************************************************************
+      subroutine angtag(val,tag,ltag)
+      implicit none
+      real val
+      character*(*) tag
+      integer ltag
+      character(32) buf,buf2
+      integer i,l
+      write(buf,'(F0.1)') val
+      buf=adjustl(buf)
+      tag=' '
+      ltag=0
+      if (buf(1:1).eq.'-') then
+        tag(1:1)='m'
+        ltag=1
+        buf=buf(2:)
+      endif
+      if (buf(1:1).eq.'.') then
+        buf2=buf
+        buf='0'//buf2(1:31)
+      endif
+      l=len_trim(buf)
+      do i=1,l
+        if (buf(i:i).eq.'.') buf(i:i)='p'
+      enddo
+      tag(ltag+1:ltag+l)=buf(1:l)
+      ltag=ltag+l
+      return
       end
 c***********************************************************************************************************************
 c*                                                                                                                     *
