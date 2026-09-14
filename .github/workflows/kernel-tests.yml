@@ -1,0 +1,19 @@
+name: kernel tests
+on:
+  push:
+    branches: [main, ai-update]
+  pull_request:
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gfortran and numpy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran python3-numpy
+      - name: Build serial and OpenMP kernels
+        run: make all openmp
+      - name: Run regression, angle loop, and OpenMP checks
+        run: make test
