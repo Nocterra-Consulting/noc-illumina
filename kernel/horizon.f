@@ -25,11 +25,10 @@ c
 c    Contact: martin.aube@cegepsherbrooke.qc.ca
 c
 c
-      subroutine horizon(x,y,z,dx,dy,altsol,anga,zhoriz,d)
-      integer width                                                       ! Matrix dimension in Length/width and height
-      parameter (width=512)
+      subroutine horizon(x,y,z,dx,dy,nbx,nby,altsol,anga,zhoriz,d)
+      integer nbx,nby                                                     ! Domain size (number of cells along x and y)
       integer x,y,nx,ny
-      real dx,dy,altsol(width,width),anga,zout,pi,angaz1,ix,iy
+      real dx,dy,altsol(nbx,nby),anga,zout,pi,angaz1,ix,iy
       real hcur,distc                                                           ! Earth curvature terrain
       real posx,posy,scalef,zhoriz,z,d,dout
       pi=3.141592654
@@ -40,13 +39,18 @@ c
       posx=real(x)*dx
       posy=real(y)*dy
       zhoriz=pi
-      d=(real(width))*sqrt(1.+tan(angaz1)**2.)
-      do while (((posx.le.real(width)*dx).and.(posx.ge.1.*dx)).and.
-     +((posy.le.real(width)*dy).and.(posy.ge.1.*dy)))
+      d=(real(nbx))*sqrt(1.+tan(angaz1)**2.)
+      do while (((posx.le.real(nbx)*dx).and.(posx.ge.1.*dx)).and.
+     +((posy.le.real(nby)*dy).and.(posy.ge.1.*dy)))
         posx=posx+ix*scalef
         posy=posy+iy*scalef
         nx=nint(posx/dx)
         ny=nint(posy/dy)
+c keep the cell inside the domain (nint can round past the edge)
+        if (nx.lt.1) nx=1
+        if (nx.gt.nbx) nx=nbx
+        if (ny.lt.1) ny=1
+        if (ny.gt.nby) ny=nby
 c earth curvature (first order correction)
         distc=sqrt((dx*real(nx-x))**2.+(dy*real(ny-y))**2.)
         call curvature(distc,hcur)
