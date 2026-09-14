@@ -1,7 +1,7 @@
 # Synthetic regression harness
 
 This directory holds a small synthetic ILLUMINA case. The case runs in
-about 2 s and does not need the `illum` Python package or GDAL. Only
+a few seconds and does not need the `illum` Python package or GDAL. Only
 `python3` with `numpy` is required.
 
 The check compares:
@@ -26,28 +26,41 @@ The check compares:
 
 The kernel accepts three optional positional arguments:
 
-    illumina [PARFILE [OUTROOT [ANGLES_FILE]]]
+    illumina [PARFILE [OUTFILE [ANGLES_FILE]]]
 
 - `PARFILE`: the parameter file (default `illumina.in`).
-- `OUTROOT`: the root of the output file names (default: `basenm`, line
-  2 of the parameter file). Input file names always use `basenm`.
+- `OUTFILE`: the output file name (default `<basenm>.out`, where
+  `basenm` is line 2 of the parameter file). Input file names always
+  use `basenm`. The output root `<root>` is `OUTFILE` without a
+  trailing `.out`.
 - `ANGLES_FILE`: a list of pointings, one `elevation_deg azimuth_deg`
   pair per line (geographic azimuth, the convention of line 17 of the
   parameter file). Blank lines and lines that start with `#` are
-  skipped. Without this file the single pointing of the parameter file
-  is used.
+  skipped. Every elevation must be within -90..90 deg. The kernel stops
+  with a message when the file is missing, has no pointing, or has a
+  line that cannot be parsed. Without this argument the single pointing
+  of the parameter file is used.
+
+Arguments 1 and 2 are read with a list-directed read, so a path that
+contains `/` is cut at the slash. Argument 3 is copied as is, so any
+path works. The kernel prints the resolved file names and the number of
+pointings at start-up.
 
 The kernel loads the domain once and loops over the pointings. Output
 files:
 
-- one pointing: `<OUTROOT>.out`, `<OUTROOT>_pcl.bin`,
-  `<OUTROOT>_result.txt` (unchanged names),
-- several pointings: `<OUTROOT>_e<elev>_a<azim>.out`, `_pcl.bin` and
+- one pointing: `<root>.out`, `<root>_result.txt` and
+  `<basenm>_pcl.bin` (unchanged names; the contribution map keeps the
+  `basenm` root as before),
+- several pointings: `<root>_e<elev>_a<azim>.out`, `_pcl.bin` and
   `_result.txt`, where the angles are written with one decimal, `.`
   replaced by `p` and a leading `-` replaced by `m` (for example
-  `synth_e30p0_a45p0.out`, `synth_em5p0_a350p0_result.txt`),
-- always: `<OUTROOT>_results.txt` with the `key=value` block of every
-  pointing, blocks separated by a blank line.
+  `synth_e30p0_a45p0.out`, `synth_em5p0_a350p0_result.txt`,
+  `synth_e0p0_a0p0_pcl.bin`). Two pointings that round to the same
+  tenth of a degree get the same file names.
+- always: `<root>_results.txt` with the `key=value` block of every
+  pointing, blocks separated by a blank line. The file is overwritten
+  on every run.
 
 ## Run the check
 
@@ -57,9 +70,11 @@ or
 
     make
     python3 tests/regression/run_regression.py --binary bin/illumina
+    python3 tests/regression/run_angles.py --binary bin/illumina
 
 The harness regenerates the inputs when `<case>/illumina.in` is
-missing, with the `make_case_args` stored in `reference.json`. Options:
+missing, with the `make_case_args` stored in `reference.json`. Options
+of `run_regression.py`:
 
     --binary PATH    kernel binary (default bin/illumina)
     --case DIR       case directory (default tests/regression/case_small)
@@ -77,55 +92,21 @@ The exit status is 0 on PASS and 1 on FAIL.
 
 1. runs the binary three times with no arguments, each time with a
    different pointing on line 17 of a temporary copy of `illumina.in`
-   (`30 45`, `10 120`, `60 300`),
+   (`30 45` = the reference pointing, `10 120`, `60 300`),
 2. runs the binary once with an angles file that lists the three
-   pointings,
+   pointings (`illumina illumina.in synth.out angles.txt`),
 3. asserts that every `_result.txt` and every `_pcl.bin` of the looped
    run is byte-identical to the matching single run,
 4. asserts that the first pointing of the looped run matches
    `reference.json`,
-5. asserts that the combined `_results.txt` equals the three individual
-   `_result.txt` files,
+5. asserts that the combined `synth_results.txt` equals the three
+   single `_result.txt` files joined with one blank line,
 6. reports the wall time of the three single runs and of the looped run.
 
-Use `--keep` to keep the temporary work directories.
-
-## OpenMP check
-
-    make test-omp
-
-or
-
-    make openmp
-    python3 tests/regression/run_omp.py
-
-`make test` runs this check after the two serial checks when
-`bin/illumina_omp` exists. The script runs the serial binary once and the
-OpenMP binary once per thread count (default `--threads 1,4`). It asserts:
-
-1. `OMP_NUM_THREADS=1`: `_result.txt` and `_pcl.bin` are byte-identical
-   to the serial run,
-2. more threads: the six results and the non-zero `_pcl.bin` pixels agree
-   with the serial run within `--rtol` (default 1e-4). The OpenMP
-   reductions change the order of the floating-point sums, so the last
-   bits can differ.
-
-The script prints the wall time of every run. Use `--keep` to keep the
-output files (`omp_serial*`, `omp_t<N>*`).
-
-The kernel parallelises the loop over the source cells inside every line
-of sight step (`kernel/illumina.f`, the `x_s`/`y_s` loop of the scattered
-light section). The cloud case (`cloudt.ne.0`) runs serial because
-`icloud` is a running sum that the loop also reads.
-
-For a timing case with many lamps:
-
-    python3 tests/regression/make_case.py --size 256 --lamps 400 \
-        --out tests/regression/case_large
-    python3 tests/regression/run_omp.py --case tests/regression/case_large \
-        --threads 1,2,4
-
-`case_large/` is ignored by git (no `reference.json`).
+The script accepts `--binary`, `--case`, `--rtol`, `--atol` and
+`--timeout` like `run_regression.py`. Use `--keep` to keep the
+temporary work directories. The exit status is 0 on PASS and 1 on
+FAIL.
 
 ## Regenerate the case
 
@@ -136,6 +117,13 @@ For a timing case with many lamps:
 `--pad 512` (embed the domain in a 512 x 512 zero array as the Python
 side does), `--double-scattering 0|1`, `--stop-limit X` and `--lamps N`
 (about N extra lamps on a regular grid, for timing cases; default 0).
+
+For a timing case with many lamps:
+
+    python3 tests/regression/make_case.py --size 256 --lamps 400 \
+        --out tests/regression/case_large
+
+`case_large/` is ignored by git (no `reference.json`).
 
 ## Rebuild the reference
 
@@ -154,9 +142,8 @@ the wall time of the reference run.
 
 ## Hill case
 
-`case_hill/` is a second case with terrain. `make test` runs it after
-`case_small`. Regenerate it with the arguments stored in
-`case_hill/reference.json` (`make_case_args`):
+`case_hill/` is a second case with terrain. It has no committed
+`reference.json` and `make test` does not run it. Generate it with:
 
     python3 tests/regression/make_case.py --out tests/regression/case_hill \
         --hill 200 500 1060.7 1060.7 --hill-lamps --obs-height 0.2 --view 3 45
