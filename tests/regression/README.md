@@ -108,6 +108,70 @@ The script accepts `--binary`, `--case`, `--rtol`, `--atol` and
 temporary work directories. The exit status is 0 on PASS and 1 on
 FAIL.
 
+## OpenMP check
+
+    make test-omp
+
+or
+
+    make openmp
+    python3 tests/regression/run_omp.py --serial bin/illumina --omp bin/illumina_omp
+
+`make test` runs this check after the two serial checks when
+`bin/illumina_omp` exists. The kernel has one `!$omp parallel do`
+region: the loop over the source cells (`x_s`, `y_s`) inside each line
+of sight step and each lamp type in the scattered-radiance section of
+`kernel/illumina.f`. The serial build (`bin/illumina`) treats the
+directives as comments and is unchanged.
+
+`run_omp.py` copies the inputs of a case into temporary work
+directories and:
+
+1. runs the serial binary,
+2. runs the OpenMP binary with `OMP_NUM_THREADS=1` and asserts that
+   `<basenm>_result.txt` and `<basenm>_pcl.bin` are byte-identical to
+   the serial run,
+3. runs the OpenMP binary with every other thread count of `--threads`
+   (default `1,4`) and asserts that the six results of
+   `<basenm>_result.txt` and the non-zero pixels of `<basenm>_pcl.bin`
+   agree with the serial run within `--rtol` (default 1e-4; the
+   reduction changes the summation order, so bit-identity is not
+   expected),
+4. prints the wall time and speed-up of every run and the largest
+   relative difference of every threaded run.
+
+Options: `--serial`, `--omp`, `--case`, `--threads 1,2,4`, `--rtol`,
+`--atol`, `--timeout`, `--keep` (keep the work directories) and
+`--verbose` (print every compared value). The exit status is 0 on PASS
+and 1 on FAIL.
+
+For a timing run on the large case:
+
+    python3 tests/regression/run_omp.py --case tests/regression/case_large \
+        --threads 1,2,4
+
+Notes:
+
+- With clouds on (`cloudt` other than 0) the region runs on one thread
+  (`if(cloudt.eq.0)` clause): `icloud` is a running sum that the loop
+  also reads, so the result depends on the order of the source cells.
+- OMPFLAGS in the Makefile adds `-fmax-stack-var-size=65536`.
+  `-fopenmp` implies `-frecursive`, which puts every local array on the
+  stack; `zondif(3000000,3)` (36 MB) then overflows the default 8 MB
+  stack and the kernel stops with a segmentation fault. The flag keeps
+  arrays above 64 KB in static storage (main program only) and every
+  smaller array on the stack. gfortran prints a warning about this
+  override for every source file; the warning is expected.
+- The check on `case_hill` is known to differ at 1 thread. The serial
+  code reads `zhoriz` in the line of sight test
+  (`angze1-zhoriz.lt.0.00001`) after the source loop has overwritten
+  it with the horizon of the last source or reflecting cell. The
+  OpenMP build keeps `zhoriz` private in the loop, so the test sees the
+  observer horizon as intended. The serial run computes 14 line of
+  sight steps, the 1-thread OpenMP run 13. A serial build that stores
+  the observer horizon in its own variable is byte-identical to the
+  OpenMP run. `case_small` (flat terrain) is unaffected.
+
 ## Regenerate the case
 
     rm -rf tests/regression/case_small

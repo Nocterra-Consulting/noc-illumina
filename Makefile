@@ -86,11 +86,12 @@ $(BIN)/continue_illumina: $(KERNEL)/continue_illumina.f | $(BIN)
 test: all
 	$(PYTHON) tests/regression/run_regression.py --binary $(BIN)/illumina --case tests/regression/case_small
 	$(PYTHON) tests/regression/run_angles.py --binary $(BIN)/illumina --case tests/regression/case_small
+	@if [ -x $(BIN)/illumina_omp ]; then $(MAKE) --no-print-directory test-omp; fi
 
 # OpenMP check: 1 thread must be bit-identical to the serial build,
 # 4 threads must agree within rtol 1e-4.
 test-omp: all openmp
-	@true
+	$(PYTHON) tests/regression/run_omp.py --serial $(BIN)/illumina --omp $(BIN)/illumina_omp --case tests/regression/case_small
 
 clean:
 	rm -rf $(BUILD)

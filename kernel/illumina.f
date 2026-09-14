@@ -1317,6 +1317,31 @@ c beginning of the loop over the types of light sources
                       ITT(x_s,y_s,stype)=0.
                     enddo
                   enddo
+c OpenMP: the source cells of one line of sight voxel and one lamp
+c type are independent. itotty is the only scalar summed over the
+c cells; ITT(x_s,y_s,stype) is written once per iteration. icloud is a
+c running sum that the loop also reads (isourc=isourc+icloud), so the
+c loop runs on one thread when clouds are on (if clause). pi is a
+c parameter and cannot appear in a clause.
+!$omp parallel do default(none) if(cloudt.eq.0)
+!$omp& collapse(2) schedule(dynamic,4)
+!$omp& reduction(+:itotty)
+!$omp& shared(imin,imax,jmin,jmax,stype,ntype,nbx,nby,dx,dy,altsol,
+!$omp& lampal,lamplu,drefle,obsH,ofill,inclix,incliy,pvalno,rx_c,ry_c,
+!$omp& z_c,rx_obs,ry_obs,z_obs,haer,hlay,tranam,tranaa,tranal,tabs,un,
+!$omp& secdif,secdil,fdifan,fdifl,omemax,omefov,portio,boxx,boxy,
+!$omp& reflsiz,srefl,effdif,zondif,ndiff,stepdi,siz,dss,cloudt,
+!$omp& cloudbase,iz,scal,verbose,ITT,icloud)
+!$omp& private(x_s,y_s,x_sr,y_sr,idi,na,naz,anglez,dirck,xsrmi,xsrma,
+!$omp& ysrmi,ysrma,x_dif,y_dif,id,jd,nss,ndi,rx_s,ry_s,z_s,rx_sr,ry_sr,
+!$omp& z_sr,rx_dif,ry_dif,z_dif,distd,dho,angzen,angazi,zhoriz,dh,hh,
+!$omp& ff,angmin,transm,transa,transl,omega,P_dir,P_indir,P_dif1,fldir,
+!$omp& angdif,pdifdi,intdir,azcl1,azcl2,doc2,dsc2,rcloud,itotind,
+!$omp& itotrd,itodif,isourc,irefl,irefl1,intind,haut,ouvang,nbang,
+!$omp& flrefl,flindi,pdifin,ds1,ds2,ds3,fldif2,pdifd1,volu,idif2,fdif2,
+!$omp& pdifd2,idif2p,fldif1,idif1,fldiff,idiff2,epsilx,epsily,dxp,dyp,
+!$omp& xc,yc,zc,xn,yn,zn,r1x,r1y,r1z,r2x,r2y,r2z,r3x,r3y,r3z,r4x,r4y,
+!$omp& r4z)
                   do x_s=imin(stype),imax(stype)                          ! beginning of the loop over the column (longitude the) of the domain.
                     do y_s=jmin(stype),jmax(stype)                        ! beginning of the loop over the rows (latitud) of the domain.
                       intdir=0.
@@ -2007,6 +2032,7 @@ c**********************************************************************
                         endif                                             ! end of the condition "the luminosity of the ground pixel x_s,y_s in not null".
                       enddo                                               ! end the loop over the lines (latitude) of the domain (y_s).
                     enddo                                                 ! end the loop over the column (longitude) of the domain (x_s).
+!$omp end parallel do
 c end of the computation of the intensity of one source type
                     itotci=itotci+itotty                                  ! Sum of the intensities all source all type to a line of sight element
                     do x_s=imin(stype),imax(stype)
