@@ -23,7 +23,6 @@
 if [ ! -d bin ]
 then mkdir bin
 fi
-
 firstLine=`head -1 illum/__init__.py`
 version=${firstLine:15:-1}
 
