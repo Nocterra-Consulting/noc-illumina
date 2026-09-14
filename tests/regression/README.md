@@ -1,8 +1,9 @@
 # Synthetic regression harness
 
-This directory holds a small synthetic ILLUMINA case. The case runs in
-a few seconds and does not need the `illum` Python package or GDAL. Only
-`python3` with `numpy` is required.
+This directory holds two small synthetic ILLUMINA cases: `case_small`
+(flat terrain) and `case_hill` (one Gaussian hill, see "Hill case"). Each
+case runs in a few seconds and does not need the `illum` Python package
+or GDAL. Only `python3` with `numpy` is required.
 
 The check compares:
 
@@ -19,8 +20,9 @@ The check compares:
   compares the results with `case_small/reference.json`.
 - `run_angles.py` checks the multi-pointing loop of the kernel (see
   "Multi-pointing check" below).
-- `case_small/reference.json` is the stored reference (committed). All
-  other files in `case_small/` are generated and ignored by git.
+- `case_small/reference.json` and `case_hill/reference.json` are the
+  stored references (committed). All other files in `case_*/` are
+  generated and ignored by git.
 
 ## Kernel command line
 
@@ -70,6 +72,8 @@ or
 
     make
     python3 tests/regression/run_regression.py --binary bin/illumina
+    python3 tests/regression/run_regression.py --binary bin/illumina \
+        --case tests/regression/case_hill
     python3 tests/regression/run_angles.py --binary bin/illumina
 
 The harness regenerates the inputs when `<case>/illumina.in` is
@@ -117,8 +121,8 @@ or
     make openmp
     python3 tests/regression/run_omp.py --serial bin/illumina --omp bin/illumina_omp
 
-`make test` runs this check after the two serial checks when
-`bin/illumina_omp` exists. The kernel has one `!$omp parallel do`
+`make test` runs this check on `case_small` and on `case_hill` after
+the serial checks when `bin/illumina_omp` exists. The kernel has one `!$omp parallel do`
 region: the loop over the source cells (`x_s`, `y_s`) inside each line
 of sight step and each lamp type in the scattered-radiance section of
 `kernel/illumina.f`. The serial build (`bin/illumina`) treats the
@@ -162,15 +166,16 @@ Notes:
   arrays above 64 KB in static storage (main program only) and every
   smaller array on the stack. gfortran prints a warning about this
   override for every source file; the warning is expected.
-- The check on `case_hill` is known to differ at 1 thread. The serial
-  code reads `zhoriz` in the line of sight test
-  (`angze1-zhoriz.lt.0.00001`) after the source loop has overwritten
-  it with the horizon of the last source or reflecting cell. The
-  OpenMP build keeps `zhoriz` private in the loop, so the test sees the
-  observer horizon as intended. The serial run computes 14 line of
-  sight steps, the 1-thread OpenMP run 13. A serial build that stores
-  the observer horizon in its own variable is byte-identical to the
-  OpenMP run. `case_small` (flat terrain) is unaffected.
+- `case_hill` exposed the observer horizon bug (#59). Before the fix
+  the serial kernel read `zhoriz` in the line of sight test
+  (`angze1-zhoriz.lt.0.00001`) after the source and reflection loops
+  had overwritten it with the horizon of the last processed cell. The
+  OpenMP build keeps `zhoriz` private in the loop, so the 1-thread run
+  saw the observer horizon and differed from the serial run (14 line
+  of sight steps serial, 13 with OpenMP). The kernel now stores the
+  observer horizon in `zhorob`; serial and 1-thread runs are
+  byte-identical on both cases. `case_small` (flat terrain) never
+  showed the difference.
 
 ## Regenerate the case
 
@@ -206,8 +211,10 @@ the wall time of the reference run.
 
 ## Hill case
 
-`case_hill/` is a second case with terrain. It has no committed
-`reference.json` and `make test` does not run it. Generate it with:
+`case_hill/` is a second case with terrain. Its `reference.json` is
+committed and `make test` runs it after `case_small`. The harness
+regenerates the inputs from `make_case_args` when they are missing; to
+generate them by hand:
 
     python3 tests/regression/make_case.py --out tests/regression/case_hill \
         --hill 200 500 1060.7 1060.7 --hill-lamps --obs-height 0.2 --view 3 45
@@ -238,3 +245,35 @@ above), `--obs-height Z` (default 10 m) and `--view ELEV AZIM` (default
 ### Reference history
 
 - `case_small/reference.json` is built from `main` (e33b0f4, `master` 56745d2 merged with `updated_batches`). It is bit-identical to the earlier `master` reference.
+- `case_hill/reference.json` (2026-09-14) is built from the `ai-update`
+  serial kernel with the observer horizon fix (#59, variable `zhorob`).
+  The `git_commit` field records the `ai-update` checkout at run time
+  (3416aa6 before the fix was committed). A reference built from `main`
+  (e33b0f4) in a worktree was bit-identical to the pre-fix `ai-update`
+  serial kernel; the flat `case_small` reference is unchanged by the
+  fix. Before/after numbers of the fix on `case_hill` (serial build,
+  `synth.out` and `synth_pcl.bin`):
+
+  | quantity | main / pre-fix | fixed | note |
+  |----------|---------------:|------:|------|
+  | line of sight steps | 14 | 13 | last step was inside the terrain |
+  | irdirect | 1.720e-04 | 1.720e-04 | unchanged |
+  | irrdirect | 1.040e-04 | 1.040e-04 | unchanged |
+  | direct | 1.060e-02 | 1.060e-02 | unchanged |
+  | rdirect | 7.300e-03 | 7.300e-03 | unchanged |
+  | diffuse | 9.320e-05 | 9.290e-05 | -0.3 % |
+  | pcl(37,36) | 9.1080999e-01 | 9.1420996e-01 | +0.4 % (in front of the hill) |
+  | pcl(37,38) | 4.0871121e-02 | 4.1023631e-02 | +0.4 % |
+  | pcl(39,36) | 4.4586673e-02 | 4.4753052e-02 | +0.4 % |
+  | pcl(24,51) | 5.0313579e-06 | 4.9881542e-06 | -0.9 % (flank) |
+  | pcl(52,23) | 5.4183879e-06 | 5.3718609e-06 | -0.9 % (flank) |
+  | pcl(46,48) | 1.0199171e-06 | 9.1573844e-07 | -10 % (behind the hill) |
+  | pcl(49,45) | 1.0879110e-06 | 9.7678719e-07 | -10 % (behind the hill) |
+  | pcl(51,50) | 3.7196695e-03 | 1.0552055e-06 | -100 % (behind the hill; the stale step lit it) |
+
+  The fixed serial run is byte-identical to the pre-fix 1-thread OpenMP
+  run (`synth_result.txt` and `synth_pcl.bin`), and to the fixed
+  1-thread OpenMP run. The flat twin of the case (`--hill 0 500 1060.7
+  1060.7 --hill-lamps --obs-height 0.2 --view 3 45`) computes 30 line
+  of sight steps, diffuse 3.03e-05 and behind-the-hill pcl weights of
+  0.06 to 0.17, so the hill changes the result materially.

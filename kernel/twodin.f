@@ -12,7 +12,7 @@ c (see twodsize). The file header must have the same size.
           print*,'File size is: ',nbxf,'x',nbyf
           print*,'Topography size is: ',nbx,'x',nby
           print*,'Computation aborted'
-          stop
+          stop 1
          endif
          do j=nby,1,-1
             do i=1,nbx
@@ -34,7 +34,7 @@ c read only the nbx,nby header of an unformatted binary file
          print*,'Invalid domain size in file: ',filename
          print*,'Size read: ',nbx,'x',nby
          print*,'Computation aborted'
-         stop
+         stop 1
        endif
        return
        end

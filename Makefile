@@ -5,6 +5,7 @@
 #   debug   checked build           -> bin/illumina_debug
 #   openmp  release build + OpenMP  -> bin/illumina_omp
 #   test    build "all", then run the synthetic regression harness
+#           (case_small and case_hill)
 #           (also runs test-omp when bin/illumina_omp exists)
 #   test-omp build "openmp", then check it against the serial build
 #   clean   remove the build directory and the binaries
@@ -85,6 +86,7 @@ $(BIN)/continue_illumina: $(KERNEL)/continue_illumina.f | $(BIN)
 
 test: all
 	$(PYTHON) tests/regression/run_regression.py --binary $(BIN)/illumina --case tests/regression/case_small
+	$(PYTHON) tests/regression/run_regression.py --binary $(BIN)/illumina --case tests/regression/case_hill
 	$(PYTHON) tests/regression/run_angles.py --binary $(BIN)/illumina --case tests/regression/case_small
 	@if [ -x $(BIN)/illumina_omp ]; then $(MAKE) --no-print-directory test-omp; fi
 
@@ -92,6 +94,7 @@ test: all
 # 4 threads must agree within rtol 1e-4.
 test-omp: all openmp
 	$(PYTHON) tests/regression/run_omp.py --serial $(BIN)/illumina --omp $(BIN)/illumina_omp --case tests/regression/case_small
+	$(PYTHON) tests/regression/run_omp.py --serial $(BIN)/illumina --omp $(BIN)/illumina_omp --case tests/regression/case_hill
 
 clean:
 	rm -rf $(BUILD)

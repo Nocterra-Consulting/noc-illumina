@@ -246,6 +246,7 @@ c                                                                         ! a li
       integer i,j,k,id,jd
       real tranam,tranaa                                                  ! atmospheric transmittancess of a path (molecular, aerosol)
       real zhoriz                                                         ! zenith angle of the horizon
+      real zhorob                                                         ! zenith angle of the horizon seen from the observer along the line of sight
       real direct                                                         ! direct radiance from sources on a surface normal to the line of sight (no scattering)
       real rdirect                                                        ! direct radiance from a reflecting surface on a surface normal to the line of sight (no scattering)
       real irdirect                                                       ! direct irradiance from sources on a surface normal to the line of sight (no scattering)
@@ -295,7 +296,11 @@ c NEW CHANGE HERE: allow a custom named input file to be given as CLI arguement
         read(arg1,*)inputfile
       endif
       print*,'Reading illumina input file', inputfile
-      open(unit=1,file=inputfile,status='old')
+      open(unit=1,file=inputfile,status='old',iostat=ios)
+      if (ios.ne.0) then
+        print*,'Error: cannot open parameter file ',trim(inputfile)
+        stop 1
+      endif
         read(1,*)
         read(1,*) basenm
         read(1,*) dx,dy
@@ -338,7 +343,7 @@ c pointing of the parameter file forms a list of length 1.
         open(unit=1,file=anglesfile,status='old',iostat=ios)
         if (ios.ne.0) then
           print*,'Error: cannot open angles file ',trim(anglesfile)
-          stop
+          stop 1
         endif
 c first pass: count the pointings
         npts=0
@@ -349,7 +354,7 @@ c first pass: count the pointings
           if (lkind.eq.2) then
             print*,'Error: cannot parse angles file line: ',
      +      trim(aline)
-            stop
+            stop 1
           endif
           if (lkind.eq.1) npts=npts+1
         enddo
@@ -357,7 +362,7 @@ c first pass: count the pointings
         if (npts.lt.1) then
           print*,'Error: no pointing found in angles file ',
      +    trim(anglesfile)
-          stop
+          stop 1
         endif
 c second pass: store the pointings
         allocate(elevs(npts),azims(npts))
@@ -379,12 +384,12 @@ c second pass: store the pointings
         if (elevs(ipt).gt.90.) then
           print*,'Error: elevation angle larger than 90 deg',
      +    ' at pointing',ipt,elevs(ipt)
-          stop
+          stop 1
         endif
         if (elevs(ipt).lt.-90.) then
           print*,'Error: elevation angle smaller than -90 deg',
      +    ' at pointing',ipt,elevs(ipt)
-          stop
+          stop 1
         endif
       enddo
       dfov=(dfov*pi/180.)/2.
@@ -423,7 +428,7 @@ c  determine the Length of basenm
       if ((ntype.lt.1).or.(ntype.gt.nzon)) then
         print*,'Error: number of source types must be between 1 and',
      +  nzon,' got',ntype
-        stop
+        stop 1
       endif
 c read the domain size from the topography header and allocate the
 c domain arrays to the actual size (no more fixed 512 x 512 padding)
@@ -439,7 +444,7 @@ c domain arrays to the actual size (no more fixed 512 x 512 padding)
      +(y_obs.gt.nby)) then
         print*,'Error: observer position outside the domain',x_obs,
      +  y_obs,' domain',nbx,nby
-        stop
+        stop 1
       endif
 c NEW CHANGE HERE: allow for a custom output file name
       if (iargc()<2) then
@@ -640,7 +645,7 @@ c reading luminosity files
             do j=1,nby                                                    ! beginning of the loop over all cells along y.
               if (val2d(i,j).lt.0.) then                                  ! searching of negative fluxes
                 print*,'***Negative lamp flux!, stopping execution'
-                stop
+                stop 1
               endif
             enddo                                                         ! end of the loop over all cells along y.
           enddo
@@ -724,11 +729,11 @@ c=======================================================================
         azim=azims(ipt)
         if (angvis.gt.90.) then
            print*,'Error: elevation angle larger than 90 deg'
-           stop
+           stop 1
         endif
         if (angvis.lt.-90.) then
            print*,'Error: elevation angle smaller than -90 deg'
-           stop
+           stop 1
         endif
 c conversion of the geographical viewing angles toward the cartesian
 c angle we assume that the angle in the file illumina.in
@@ -1066,7 +1071,7 @@ c computation of the solid angle of the reflecting cell seen from the source
      +                      r3z,r4x,r4y,r4z)
          if (omega.lt.0.) then
            print*,'ERROR: Solid angle of the reflecting surface < 0.'
-           stop
+           stop 1
          endif
 c estimation of the half of the underlying angle of the solid angle       ! this angle servira a obtenir un meilleur isime (moyenne) of
 c                                                                         ! P_dir for le cas of grans solid angles the , pvalno varie significativement sur +- ouvang.
@@ -1221,13 +1226,13 @@ c temporaire !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         if ((z_obs.ge.cloudbase).and.(z_obs.le.cloudtop)) then
           print*,'The observer is inside the cloud! Abort computing.',
      +    z_obs,cloudbase
-          stop
+          stop 1
         endif
  1110   format(I4,1x,I4,1x,I4)
         fctcld=0.
         ftocap=0.                                                         ! Initialisation of the value of flux received by the sensor
         call horizon(x_obs,y_obs,z_obs,dx,dy,nbx,nby,altsol,angaz1,       ! calculating the distance before the line of sight beeing blocked by topography
-     +  zhoriz,dhmax)
+     +  zhorob,dhmax)
         rx_c=real(x_obs)*dx-ix*scal/2.
         ry_c=real(y_obs)*dx-iy*scal/2.
         z_c=z_obs-iz*scal/2.
@@ -1235,7 +1240,7 @@ c temporaire !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
           rx_c=rx_c+ix*(scalo/2.+scal/2.)
           ry_c=ry_c+iy*(scalo/2.+scal/2.)
         dh0=sqrt((rx_c-rx_obs)**2.+(ry_c-ry_obs)**2)
-          if ((dh0.le.dhmax).or.((dh0.gt.dhmax).and.(angze1-zhoriz.lt.    ! the line of sight is not yet blocked by the topography
+          if ((dh0.le.dhmax).or.((dh0.gt.dhmax).and.(angze1-zhorob.lt.    ! the line of sight is not yet blocked by the topography
      +    0.00001))) then
           x_c=nint(rx_c/dx)
           if (x_c.lt.1) x_c=1
@@ -1302,7 +1307,7 @@ c computation of the Solid angle of the line of sight voxel seen from the observ
               if (dis_obs.eq.0.) then
                 print*,'ERROR problem with dis_obs',dis_obs
                 print*,rx_c,x_obs,y_c,y_obs,z_c,z_obs
-                stop
+                stop 1
               endif
               ometif=pi*(diamobj/2.)**2./dis_obs**2.
 c beginning of the loop over the types of light sources
@@ -1565,7 +1570,7 @@ c computation of the solid angle of the reflecting cell seen from the source
      +                                  r3z,r4x,r4y,r4z)
          if (omega.lt.0.) then
            print*,'ERROR: Solid angle of the reflecting surface < 0.'
-           stop
+           stop 1
          endif
 c estimation of the half of the underlying angle of the solid angle       ! this angle servira a obtenir un meilleur isime (moyenne) of
 c                                                                         ! P_dir for le cas of grans solid angles the , pvalno varie significativement sur +- ouvang.
@@ -1682,7 +1687,7 @@ c cell unitaire
             volu=siz**3.
             if (volu.lt.0.) then
               print*,'ERROR, volume 2 is negative!'
-              stop
+              stop 1
             endif
 c computing scattered intensity toward the line of sight voxel from the scattering voxel
             idif2=fldif2*pdifd1*volu
@@ -1803,7 +1808,7 @@ c computing the scattering probability toward the line of sight voxel
               volu=siz**3.
               if (volu.lt.0.) then
                 print*,'ERROR, volume 1 is negative!'
-                stop
+                stop 1
               endif
 c computing scattered intensity toward the line of sight voxel from the scattering voxel
               idif1=fldif1*pdifd1*volu
@@ -2008,7 +2013,7 @@ c include clouds in the total intensity
 
         if ((itodif.lt.0.).or.(itotrd.lt.0.)) then
           print*,intdir,itotind,itodif,itotrd
-          stop
+          stop 1
         endif
 
 
@@ -2021,7 +2026,7 @@ c include clouds in the total intensity
        print*,' source->reflexion->scattering->scattering=',itotrd
        if (intdir*itotind*itodif*itotrd.lt.0.) then
          print*,'PROBLEM! Negative intensity.'
-         stop
+         stop 1
        endif
                             endif
 c**********************************************************************
@@ -2080,7 +2085,7 @@ c computation of the flux reaching the objective of the telescope from the line 
                 enddo
                 if (cos(pi-angzen).eq.0.) then
                   print*,'ERROR perfectly horizontal sight is forbidden'
-                  stop
+                  stop 1
                 endif
 c end of the computation of the flux reaching the observer voxel from the line of sight voxel
                 ftocap=ftocap+fcapt                                       ! flux for all source all type all line of sight element
