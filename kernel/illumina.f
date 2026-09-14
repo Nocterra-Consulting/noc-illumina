@@ -69,8 +69,8 @@ c=======================================================================
 c     Variables declaration
 c=======================================================================
 c
-      integer width,nzon                                                  ! Matrix dimension in Length/width and height
-      parameter (width=512,nzon=256)
+      integer nzon                                                        ! Maximum number of source types
+      parameter (nzon=256)
       integer iun,ideux
       real pi,pix4
       real zero,un                                                        ! value of 0. and 1.
@@ -79,25 +79,29 @@ c
       parameter (pix4=4.*pi)
       character(200) arg1,arg2                                            ! NEW CHANGE: CLI added to allow for custom in/outs
       character(200) inputfile,outputfile                                       ! NEW CHANGE: variable for inputfile and outputfiles
+      character(200) resfile                                              ! machine-readable result record (<root>_result.txt)
+      integer lenout                                                      ! length of the output file name
+      real azimgeo                                                        ! geographic viewing azimuth as read from the parameter file (deg)
       character*72 mnaf                                                   ! Terrain elevation file
       character*72 diffil                                                 ! Aerosol file
       character*72 pclf,pclgp                                             ! Files containing contribution and sensitivity maps
       character*72 pclimg,pcwimg
       character*72 basenm                                                 ! Base name of files
       integer lenbase                                                     ! Length of the Base name of the experiment
-      real lambda,pressi,drefle(width,width)                              ! Wavelength (nanometer), atmospheric pressure (kPa), mean free path to the ground (meter).
+      real lambda,pressi                                                  ! Wavelength (nanometer), atmospheric pressure (kPa)
+      real, allocatable :: drefle(:,:)                                    ! mean free path to the ground (meter).
       real reflsiz                                                        ! Size of the reflecting surface
       integer ntype                                                       ! Number of light source types or zones considered
       real largx                                                          ! Width (x axis) of the modeling domain (meter)
       real largy                                                          ! Length (y axis) of the modeling domain (meter)
       integer nbx,nby                                                     ! Number of pixels in the modeling domain
-      real val2d(width,width)                                             ! Temporary input array 2d
-      real altsol(width,width)                                            ! Ground elevation (meter)
+      real, allocatable :: val2d(:,:)                                            ! Temporary input array 2d
+      real, allocatable :: altsol(:,:)                                           ! Ground elevation (meter)
       real srefl                                                          ! Ground reflectance
       integer stype                                                       ! Source type or zone index
       character*72 pafile,lufile,alfile,ohfile,odfile,offile              ! Files related to light sources and obstacles (photometric function of the sources (sr-1), flux (W), height (m), obstacles c                                                               ! height (m), obstacle distance (m), obstacle filling factor (0-1).
-      real lamplu(width,width,nzon)                                       ! Source fluxes
-      real lampal(width,width)                                            ! Height of the light sources relative to the ground (meter)
+      real, allocatable :: lamplu(:,:,:)                                     ! Source fluxes
+      real, allocatable :: lampal(:,:)                                           ! Height of the light sources relative to the ground (meter)
       real pval(181,nzon),pvalto,pvalno(181,nzon)                         ! Values of the angular photometry functions (unnormalized, integral, normalized)
       real dtheta                                                         ! Angle increment of the photometric function of the sources
       real dx,dy,dxp,dyp                                                  ! Width of the voxel (meter)
@@ -105,8 +109,8 @@ c
       real fdifa(181),fdifan(181)                                         ! Aerosol scattering functions (unnormalized and normalized)
       real extinc,scatte,anglea(181)                                      ! Aerosol cross sections (extinction and scattering), scattering angle (degree)
       real secdif                                                         ! Contribution of the scattering to the extinction
-      real inclix(width,width)                                            ! tilt of the ground pixel along x (radian)
-      real incliy(width,width)                                            ! tilt of the ground pixel along y (radian)
+      real, allocatable :: inclix(:,:)                                           ! tilt of the ground pixel along x (radian)
+      real, allocatable :: incliy(:,:)                                           ! tilt of the ground pixel along y (radian)
       integer x_obs,y_obs                                                 ! Position of the observer (INTEGER)
       real rx_obs,ry_obs
       real z_o                                                            ! observer height relative to the ground (meter)
@@ -170,15 +174,16 @@ c                                                                         ! when
       real angvis,azim                                                    ! viewing angles of the sensor.
 c                                                                         ! Useful for the calculation of the lambertian reflectance.
       real nbang                                                          ! for the averaging of the photometric function
-      real obsH(width,width),angmin                                       ! averaged height of the sub-grid obstacles, minimum angle under wich
+      real, allocatable :: obsH(:,:)                                      ! averaged height of the sub-grid obstacles
+      real angmin                                                         ! minimum angle under wich
 c                                                                         ! a light ray cannot propagate because it is blocked by a sub-grid obstable
-      real ofill(width,width)                                             ! fill factor giving the probability to hit an obstacle when pointing in its direction real 0-1
+      real, allocatable :: ofill(:,:)                                            ! fill factor giving the probability to hit an obstacle when pointing in its direction real 0-1
       integer naz,na
-      real ITT(width,width,nzon)                                          ! total intensity per type of lamp
-      real ITC(width,width)                                               ! total intensity per line of sight voxel
-      real FTC(width,width)                                               ! fraction of the total flux at the sensor level
-      real FCA(width,width)                                               ! sensor flux array
-      real lpluto(width,width)                                            ! total luminosity of the ground cell for all lamps
+      real, allocatable :: ITT(:,:,:)                                        ! total intensity per type of lamp
+      real, allocatable :: ITC(:,:)                                              ! total intensity per line of sight voxel
+      real, allocatable :: FTC(:,:)                                              ! fraction of the total flux at the sensor level
+      real, allocatable :: FCA(:,:)                                              ! sensor flux array
+      real, allocatable :: lpluto(:,:)                                           ! total luminosity of the ground cell for all lamps
       character*3 lampno                                                  ! lamp number string
       integer imin(nzon),imax(nzon),jmin(nzon),jmax(nzon)                 ! x and y limits containing a type of lamp
       real angazi                                                         ! azimuth angle between two points in rad, max dist for the horizon determination
@@ -220,7 +225,7 @@ c                                                                         ! a li
       real omemax                                                         ! max solid angle allowed
       real tcloud                                                         ! low cloud transmission
       real rx_sp,ry_sp                                                    ! position of a low cloud pixel
-      real flcld(width,width)                                             ! flux crossing a low cloud
+      real, allocatable :: flcld(:,:)                                            ! flux crossing a low cloud
       real ds1,ds2,ds3,dss                                                ! double scattering distances
       integer nss                                                         ! number of skipped 2nd scat elements
       integer ndi                                                         ! number of cell under ground
@@ -240,7 +245,7 @@ c                                                                         ! a li
       real dfov                                                           ! field of view in degrees for the calculation of the direct radiance this number will be a kind of smoothing effect. The angular grid resolution to create a direct radiance panorama should be finer than that number
       real Fo                                                             ! flux correction factor for obstacles
       real thetali                                                        ! limit angle for the obstacles blocking of viirs
-      integer viirs(width,width)                                          ! viirs flag 1=yes 0=no
+      integer, allocatable :: viirs(:,:)                                         ! viirs flag 1=yes 0=no
       character*72 vifile                                                 ! name of the viirs flag file
       real dh0,dhmax                                                      ! horizontal distance along the line of sight and maximum distance before beeing blocked by topography
       character*72 layfile                                                ! filename of the optical properties of the particle layer
@@ -318,6 +323,7 @@ c is consistent with the geographical definition
 c geographical, azim=0 toward north, 90 toward east, 180 toward south
 c etc
 c cartesian, azim=0 toward east, 90 toward north, 180 toward west etc
+      azimgeo=azim
       azim=90.-azim
       if (azim.lt.0.) azim=azim+360.
       if (azim.ge.360.) azim=azim-360.
@@ -360,6 +366,27 @@ c computing the actual AOD at the wavelength lambda
 c  determine the Length of basenm
       lenbase=index(basenm,' ')-1
       mnaf=basenm(1:lenbase)//'_topogra.bin'                              ! determine the names of input and output files
+      if ((ntype.lt.1).or.(ntype.gt.nzon)) then
+        print*,'Error: number of source types must be between 1 and',
+     +  nzon,' got',ntype
+        stop
+      endif
+c read the domain size from the topography header and allocate the
+c domain arrays to the actual size (no more fixed 512 x 512 padding)
+      call twodsize(mnaf,nbx,nby)
+      if (verbose.ge.1) print*,'Domain size (nbx,nby) = ',nbx,nby
+      allocate(drefle(nbx,nby),val2d(nbx,nby),altsol(nbx,nby))
+      allocate(lampal(nbx,nby),inclix(nbx,nby),incliy(nbx,nby))
+      allocate(obsH(nbx,nby),ofill(nbx,nby),ITC(nbx,nby),FTC(nbx,nby))
+      allocate(FCA(nbx,nby),lpluto(nbx,nby),flcld(nbx,nby))
+      allocate(viirs(nbx,nby))
+      allocate(lamplu(nbx,nby,ntype),ITT(nbx,nby,ntype))
+      if ((x_obs.lt.1).or.(x_obs.gt.nbx).or.(y_obs.lt.1).or.
+     +(y_obs.gt.nby)) then
+        print*,'Error: observer position outside the domain',x_obs,
+     +  y_obs,' domain',nbx,nby
+        stop
+      endif
 c NEW CHANGE HERE: allow for a custom output file name
       if (iargc()<2) then
         outputfile=basenm(1:lenbase)//'.out'
@@ -397,8 +424,8 @@ c Initialisation of the arrays and variables
         iun=0
         ideux=1
         icloud=0.
-        do i=1,width
-          do j=1,width
+        do i=1,nbx
+          do j=1,nby
             val2d(i,j)=0.
             altsol(i,j)=0.
             obsH(i,j)=0.
@@ -411,12 +438,16 @@ c Initialisation of the arrays and variables
             FTC(i,j)=0.
             FCA(i,j)=0.
             flcld(i,j)=0.
-            do k=1,nzon
+            drefle(i,j)=0.
+            lampal(i,j)=0.
+            do k=1,ntype
               lamplu(i,j,k)=0.
-              lampal(i,j)=0.
               ITT(i,j,k)=0.
             enddo
           enddo
+        enddo
+        do k=1,nzon
+          totlu(k)=0.
         enddo
         do i=1,181
           fdifa(i)=0.
@@ -717,7 +748,7 @@ c ******************************************************************************
      +            ry_s,angazi)
                   if (dzen.gt.pi/4.) then                                 ! 45deg. it is unlikely to have a 1km high mountain less than 1
                     call horizon(x_obs,y_obs,z_obs,dx,dy,
-     +              altsol,angazi,zhoriz,dh)
+     +              nbx,nby,altsol,angazi,zhoriz,dh)
                     if (dh.le.dho) then
                       if (dzen-zhoriz.lt.0.00001) then                    ! shadow the path line of sight-source is not below the horizon => we compute
                         hh=1.
@@ -952,7 +983,7 @@ c ******************************************************************************
      +                        ry_sr,angazi)
                               if (dzen.gt.pi/4.) then                     ! 45deg. it is unlikely to have a 1km high mountain less than 1
                                 call horizon(x_obs,y_obs,z_obs,dx,dy,
-     +                          altsol,angazi,zhoriz,dh)
+     +                          nbx,nby,altsol,angazi,zhoriz,dh)
                                 if (dh.le.dho) then
                                   if (dzen-zhoriz.lt.0.00001) then        ! shadow the path line of sight-source is not below the horizon => we compute
                                     hh=1.
@@ -1062,8 +1093,8 @@ c temporaire !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  1110   format(I4,1x,I4,1x,I4)
         fctcld=0.
         ftocap=0.                                                         ! Initialisation of the value of flux received by the sensor
-        call horizon(x_obs,y_obs,z_obs,dx,dy,altsol,angaz1,zhoriz,        ! calculating the distance before the line of sight beeing blocked by topography
-     +  dhmax)
+        call horizon(x_obs,y_obs,z_obs,dx,dy,nbx,nby,altsol,angaz1,       ! calculating the distance before the line of sight beeing blocked by topography
+     +  zhoriz,dhmax)
         rx_c=real(x_obs)*dx-ix*scal/2.
         ry_c=real(y_obs)*dx-iy*scal/2.
         z_c=z_obs-iz*scal/2.
@@ -1075,10 +1106,10 @@ c temporaire !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      +    0.00001))) then
           x_c=nint(rx_c/dx)
           if (x_c.lt.1) x_c=1
-          if (x_c.gt.width) x_c=width
+          if (x_c.gt.nbx) x_c=nbx
           y_c=nint(ry_c/dy)
           if (y_c.lt.1) y_c=1
-          if (y_c.gt.width) y_c=width
+          if (y_c.gt.nby) y_c=nby
           z_c=z_c+iz*(scalo/2.+scal/2.)
           if (z_c.gt.altsol(x_c,y_c)) then
           if ((fcapt.ge.ftocap/stoplim).and.(z_c.lt.cloudbase).and.       ! stop the calculation of the viewing line when the increment is lower than 1/stoplim
@@ -1191,8 +1222,8 @@ c computation of the horizon for the resolved shadows direct              ! hori
                               call angleazimutal(rx_s,ry_s,rx_c,          ! computation of the angle azimutal direct line of sight-source
      +                        ry_c,angazi)
                               if (angzen.gt.pi/4.) then                   ! 45deg. it is unlikely to have a 1km high mountain less than 1
-                                call horizon(x_s,y_s,z_s,dx,dy,altsol,
-     +                          angazi,zhoriz,dh)
+                                call horizon(x_s,y_s,z_s,dx,dy,nbx,nby,
+     +                          altsol,angazi,zhoriz,dh)
                                 if (dh.le.dho) then
                                   if (angzen-zhoriz.lt.0.00001) then      ! shadow the path line of sight-source is not below the horizon => we compute
                                     hh=1.
@@ -1431,10 +1462,10 @@ c ******************************************************************************
         y_dif=nint(ry_dif/dy)
         z_dif=zondif(idi,3)+(z_s+z_c)/2.
         id=nint(rx_dif/dx)
-        if (id.gt.width) id=width
+        if (id.gt.nbx) id=nbx
         if (id.lt.1) id=1
         jd=nint(ry_dif/dy)
-        if (jd.gt.width) jd=width
+        if (jd.gt.nby) jd=nby
         if (jd.lt.1) jd=1
         if (z_dif-siz/2..le.altsol(id,jd).or.(z_dif.gt.35000.).or.
      +  (z_dif.gt.cloudbase)) then                                        ! beginning diffusing cell underground
@@ -1502,7 +1533,7 @@ c computing zenith angle between the scattering voxel and the line of sight voxe
             call angleazimutal(rx_dif,ry_dif,rx_c,ry_c,angazi)            ! computation of the azimutal angle surf refl-scattering voxel
 c subgrid obstacles
             if ((x_dif.lt.1).or.(x_dif.gt.nbx).or.(y_dif.lt.1).or.
-     +      (y_dif.gt.nbx)) then
+     +      (y_dif.gt.nby)) then
               ff=0.
             else
               dho=sqrt((rx_dif-rx_c)**2.+(ry_dif-ry_c)**2.)
@@ -1625,7 +1656,7 @@ c computing zenith angle between the scattering voxel and the line of sight voxe
      +        rx_c,ry_c,angazi)
 c subgrid obstacles
             if ((x_dif.lt.1).or.(x_dif.gt.nbx).or.(y_dif.lt.1).or.
-     +      (y_dif.gt.nbx)) then
+     +      (y_dif.gt.nby)) then
               dho=sqrt((rx_dif-rx_c)**2.+(ry_dif-ry_c)**2.)
               ff=0.
                else
@@ -1715,7 +1746,8 @@ c verify if there is shadow between sr and line of sight voxel
                                         dho=sqrt((rx_sr-rx_c)**2.
      +                                  +(ry_sr-ry_c)**2.)
                                         if (angzen.gt.pi/4.) then         ! 45deg. it is unlikely to have a 1km high mountain less than 1
-        call horizon(x_sr,y_sr,z_sr,dx,dy,altsol,angazi,zhoriz,dh)
+        call horizon(x_sr,y_sr,z_sr,dx,dy,nbx,nby,altsol,angazi,zhoriz,
+     +  dh)
                                           if (dh.le.dho) then
                                             if (angzen-zhoriz.lt.
      +                                      0.00001) then                 ! the path line of sight-reflec is not below the horizon => we compute
@@ -1987,6 +2019,29 @@ c =================================
         write(2,*) '         Diffuse radiance (W/str/m**2/nm)          '
         write(2,2001) (ftocap+fctcld)/omefov/(pi*(diamobj/2.)**2.)
       close(2)
+c machine-readable result record: <root>_result.txt where <root> is
+c the output file name without a trailing '.out'
+      lenout=len_trim(outputfile)
+      if ((lenout.gt.4).and.(outputfile(lenout-3:lenout).eq.'.out'))
+     +then
+        resfile=outputfile(1:lenout-4)//'_result.txt'
+      else
+        resfile=outputfile(1:lenout)//'_result.txt'
+      endif
+      open(unit=3,file=resfile,status='unknown')
+        write(3,2002) 'elevation_deg',angvis
+        write(3,2002) 'azimuth_deg',azimgeo
+        write(3,2002) 'wavelength_nm',lambda
+        write(3,2002) 'direct_irradiance_sources',irdirect
+        write(3,2002) 'direct_irradiance_reflection',irrdirect
+        write(3,2002) 'direct_radiance_sources',direct
+        write(3,2002) 'direct_radiance_reflection',rdirect
+        write(3,2002) 'cloud_radiance',
+     +  fctcld/omefov/(pi*(diamobj/2.)**2.)
+        write(3,2002) 'diffuse_radiance',
+     +  (ftocap+fctcld)/omefov/(pi*(diamobj/2.)**2.)
+      close(3)
+ 2002 format(A,'=',ES14.6E2)
  2001 format('                   ',E10.3E2)
       stop
       end
