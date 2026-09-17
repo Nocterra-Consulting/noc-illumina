@@ -2,7 +2,7 @@
 c write a real array to an unformatted binary file
        integer nbx,nby,i,j
        real bindata(nbx,nby)
-       character*72 filename
+       character*(*) filename
        open(unit=1,form='unformatted',file=filename,action='write')
          write(1) nbx,nby
          do j=nby,1,-1
