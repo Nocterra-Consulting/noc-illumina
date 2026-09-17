@@ -77,27 +77,30 @@ c
       integer verbose                                                     ! verbose = 1 to have more print out, 0 for silent
       parameter (pi=3.141592654)
       parameter (pix4=4.*pi)
-      character(200) arg1,arg2                                            ! NEW CHANGE: CLI added to allow for custom in/outs
-      character(200) inputfile,outputfile                                       ! NEW CHANGE: variable for inputfile and outputfiles
-      character(200) resfile                                              ! machine-readable result record (<root>_result.txt)
+      integer maxnam                                                      ! maximum length of a file name built by the kernel
+      parameter (maxnam=512)
+      character(maxnam) arg1,arg2                                         ! NEW CHANGE: CLI added to allow for custom in/outs
+      character(maxnam) inputfile,outputfile                                    ! NEW CHANGE: variable for inputfile and outputfiles
+      character(maxnam) resfile                                           ! machine-readable result record (<root>_result.txt)
       integer lenout                                                      ! length of the output file name
       real azimgeo                                                        ! geographic viewing azimuth as read from the parameter file (deg)
-      character(200) arg3                                                 ! third CLI argument: angles list file
-      character(200) anglesfile                                           ! path of the angles list file (optional argument 3)
-      character(200) outroot                                              ! output name without the trailing '.out'
-      character(200) outfile                                              ! .out file of the current pointing
-      character(200) allres                                               ! combined result record (<root>_results.txt)
+      character(maxnam) arg3                                              ! third CLI argument: angles list file
+      character(maxnam) anglesfile                                        ! path of the angles list file (optional argument 3)
+      character(maxnam) outroot                                           ! output name without the trailing '.out'
+      character(maxnam) outfile                                           ! .out file of the current pointing
+      character(maxnam) allres                                            ! combined result record (<root>_results.txt)
       character(200) aline                                                ! one line of the angles list file
       character(32) etag,atag                                             ! angle tags used in the output file names
       integer lenroot,letag,latag                                         ! string lengths
+      integer lentag                                                      ! length of the root with the angle tags
       integer npts,ipt                                                    ! number of pointings, pointing counter
       integer ios,lkind                                                   ! I/O status, kind of an angles file line
       real elev1,azim1                                                    ! one pointing read from the angles file
       real, allocatable :: elevs(:),azims(:)                              ! pointings: elevation and geographic azimuth (deg)
       character*72 mnaf                                                   ! Terrain elevation file
       character*72 diffil                                                 ! Aerosol file
-      character*72 pclf,pclgp                                             ! Files containing contribution and sensitivity maps
-      character*72 pclimg,pcwimg
+      character(maxnam) pclf,pclgp                                          ! Files containing contribution and sensitivity maps
+      character(maxnam) pclimg,pcwimg
       character*72 basenm                                                 ! Base name of files
       integer lenbase                                                     ! Length of the Base name of the experiment
       real lambda,pressi                                                  ! Wavelength (nanometer), atmospheric pressure (kPa)
@@ -293,9 +296,9 @@ c NEW CHANGE HERE: allow a custom named input file to be given as CLI arguement
         inputfile='illumina.in'
       else
         call getarg(1,arg1)
-        read(arg1,*)inputfile
+        inputfile=adjustl(arg1)
       endif
-      print*,'Reading illumina input file', inputfile
+      print*,'Reading illumina input file ',trim(inputfile)
       open(unit=1,file=inputfile,status='old',iostat=ios)
       if (ios.ne.0) then
         print*,'Error: cannot open parameter file ',trim(inputfile)
@@ -448,14 +451,19 @@ c domain arrays to the actual size (no more fixed 512 x 512 padding)
       endif
 c NEW CHANGE HERE: allow for a custom output file name
       if (iargc()<2) then
+        call chknam('outputfile',lenbase+4,maxnam)
         outputfile=basenm(1:lenbase)//'.out'
       else
         call getarg(2,arg2)
-        read(arg2,*)outputfile
+        outputfile=adjustl(arg2)
       endif 
+      call chknam('pclf',lenbase+8,maxnam)
       pclf=basenm(1:lenbase)//'_pcl.txt'
+      call chknam('pclimg',lenbase+8,maxnam)
       pclimg=basenm(1:lenbase)//'_pcl.bin'
+      call chknam('pcwimg',lenbase+8,maxnam)
       pcwimg=basenm(1:lenbase)//'_pcw.bin'
+      call chknam('pclgp',lenbase+10,maxnam)
       pclgp=basenm(1:lenbase)//'_pcl.gplot'
 c root of the output names = output file name without a trailing '.out'
       lenout=len_trim(outputfile)
@@ -466,6 +474,7 @@ c root of the output names = output file name without a trailing '.out'
         lenroot=lenout
       endif
       outroot=outputfile(1:lenroot)
+      call chknam('allres',lenroot+12,maxnam)
       allres=outroot(1:lenroot)//'_results.txt'
       print*,'Parameter file: ',trim(inputfile)
       print*,'Output file: ',trim(outputfile)
@@ -754,14 +763,19 @@ c cartesian, azim=0 toward east, 90 toward north, 180 toward west etc
 c output file names of this pointing
         if (npts.eq.1) then
           outfile=outputfile
+          call chknam('resfile',lenroot+11,maxnam)
           resfile=outroot(1:lenroot)//'_result.txt'
         else
           call angtag(angvis,etag,letag)
           call angtag(azimgeo,atag,latag)
+          lentag=lenroot+letag+latag+4
+          call chknam('outfile',lentag+4,maxnam)
           outfile=outroot(1:lenroot)//'_e'//etag(1:letag)//'_a'//
      +    atag(1:latag)//'.out'
+          call chknam('pclimg',lentag+8,maxnam)
           pclimg=outroot(1:lenroot)//'_e'//etag(1:letag)//'_a'//
      +    atag(1:latag)//'_pcl.bin'
+          call chknam('resfile',lentag+11,maxnam)
           resfile=outroot(1:lenroot)//'_e'//etag(1:letag)//'_a'//
      +    atag(1:latag)//'_result.txt'
         endif
@@ -2215,6 +2229,22 @@ c <root>_e<elev>_a<azim>_result.txt) and the combined record (unit 4)
  2002 format(A,'=',ES14.6E2)
  2001 format('                   ',E10.3E2)
       stop
+      end
+c***********************************************************************
+c     chknam: stop when a file name built by the kernel does not fit
+c     in the character variable that must hold it. Writing a truncated
+c     name would silently overwrite another product file.
+c***********************************************************************
+      subroutine chknam(vname,need,maxlen)
+      implicit none
+      character*(*) vname
+      integer need,maxlen
+      if (need.gt.maxlen) then
+        print*,'Error: file name too long for variable ',vname,
+     +  ': need',need,' characters, limit',maxlen
+        stop 1
+      endif
+      return
       end
 c***********************************************************************
 c     angline: classify one line of the angles list file.

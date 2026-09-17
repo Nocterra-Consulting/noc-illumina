@@ -43,10 +43,11 @@ The kernel accepts three optional positional arguments:
   line that cannot be parsed. Without this argument the single pointing
   of the parameter file is used.
 
-Arguments 1 and 2 are read with a list-directed read, so a path that
-contains `/` is cut at the slash. Argument 3 is copied as is, so any
-path works. The kernel prints the resolved file names and the number of
-pointings at start-up.
+All three arguments are copied as is, so a path with `/`, a space or a
+comma works. The kernel prints the resolved file names and the number
+of pointings at start-up. A file name that the kernel builds is at most
+512 characters (`maxnam`); a longer name stops the run with a message
+that gives the variable and the length needed.
 
 The kernel loads the domain once and loops over the pointings. Output
 files:
