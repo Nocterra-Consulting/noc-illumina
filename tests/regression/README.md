@@ -258,6 +258,38 @@ and north of the observer cell), `--hill-lamps` (the eight-lamp layout
 above), `--obs-height Z` (default 10 m) and `--view ELEV AZIM` (default
 `30 45`).
 
+## Comparing against `main`
+
+`main` is the pre-refactor kernel (`master` merged with the DUG
+`updated_batches` build). Three fixes separate it from `ai-update`, and
+between them they account for every difference the four cases show. If a
+comparison against `main` turns up anything outside this table, it is a
+finding and not an expected change.
+
+| case | expected difference against `main` | cause | detail |
+|------|------------------------------------|-------|--------|
+| `case_small` | none; the contribution map is bit-identical and the six numbers agree to the 3 significant figures `main` prints | — | — |
+| `case_hill` | clear sky, but the contribution map moves: the pixel behind the hill falls from 3.7196695e-03 to 1.0552055e-06, and the three bright pixels rise by 0.37 % | observer horizon (#59) | "Hill case" and "Reference history" below |
+| `case_cloud_hill` | diffuse radiance -78.8 %; the map moves between x0.028 and x14.9 | cloud double count (upstream `e63f3e0`) | `case_cloud_hill` below |
+| `case_cloud_2nd` | cloud radiance -88.6 % and diffuse -95.9 % against `main` (the second fix accounts for -82.4 % of it, on top of the first) | both cloud fixes | `case_cloud_2nd` below |
+
+Two traps when comparing:
+
+- `main` prints the summary with `E10.3E2`, three significant figures,
+  where `ai-update` prints `E14.7E2`. Comparing raw values invents
+  relative differences of up to 0.5 % on quantities that are provably
+  bit-identical. Round the `ai-update` side to three figures, or compare
+  `_pcl.bin`, which carries full precision on both.
+- The contribution map moves much further than the summary numbers
+  wherever a fix applies. A summary-level comparison understates the
+  change for anything downstream that reads the map.
+
+The observer horizon fix is the one to watch on real terrain. Its error
+is not signed: `main` can report too much flux past a ridge, as it does
+here, or too little, depending on which source cell the loop happened to
+process last. It only ever touches pointings between the ground and the
+local horizon, in the azimuth sector the relief occupies.
+
 ## Cloudy cases
 
 Two cases run with a cloud layer (`cloudt` other than 0). The suite had
@@ -295,11 +327,11 @@ radiance and the contribution map change.
 | pcl(37,36) | 2.2812013e-02 | 3.3937421e-01 | x 14.9 |
 | pcl(37,38) | 4.3630410e-02 | 2.5877854e-01 | x 5.9 |
 | pcl(39,36) | 6.7651004e-02 | 2.8230387e-01 | x 4.2 |
-| pcl(24,51) | 2.5098833e-01 | 2.5995538e-02 | x 0.10 |
+| pcl(51,50) | 2.5098833e-01 | 2.5995538e-02 | x 0.10 |
 | pcl(52,23) | 2.5450671e-01 | 7.1637584e-03 | x 0.028 |
 | pcl(46,48) | 1.3889244e-01 | 3.8579978e-02 | x 0.28 |
 | pcl(49,45) | 2.1796846e-01 | 4.1151989e-02 | x 0.19 |
-| pcl(51,50) | 3.5507083e-03 | 6.6520600e-03 | x 1.9 |
+| pcl(24,51) | 3.5507083e-03 | 6.6520600e-03 | x 1.9 |
 
 The second cloud fix (upstream `1c46ee1`) leaves this case unchanged:
 with a cloud base of 1000 m no second order scattering voxel reaches the
