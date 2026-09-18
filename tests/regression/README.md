@@ -1,14 +1,21 @@
 # Synthetic regression harness
 
-This directory holds two small synthetic ILLUMINA cases: `case_small`
-(flat terrain) and `case_hill` (one Gaussian hill, see "Hill case"). Each
-case runs in a few seconds and does not need the `illum` Python package
-or GDAL. Only `python3` with `numpy` is required.
+This directory holds four small synthetic ILLUMINA cases:
+
+- `case_small`: flat terrain, clear sky.
+- `case_hill`: one Gaussian hill, clear sky (see "Hill case").
+- `case_cloud_hill`: the hill terrain under a cloud (see "Cloudy
+  cases").
+- `case_cloud_2nd`: flat terrain under a high cloud with a steep view
+  (see "Cloudy cases").
+
+Each case runs in a few seconds and does not need the `illum` Python
+package or GDAL. Only `python3` with `numpy` is required.
 
 The check compares:
 
 - the six summary numbers at the end of `<basenm>.out` (printed by the
-  kernel with 3 significant digits, format `E10.3E2`),
+  kernel with 7 significant digits, format `E14.7E2`),
 - the non-zero pixels of the contribution map `<basenm>_pcl.bin`
   (full float32 precision).
 
@@ -20,9 +27,9 @@ The check compares:
   compares the results with `case_small/reference.json`.
 - `run_angles.py` checks the multi-pointing loop of the kernel (see
   "Multi-pointing check" below).
-- `case_small/reference.json` and `case_hill/reference.json` are the
-  stored references (committed). All other files in `case_*/` are
-  generated and ignored by git.
+- `reference.json` in each of the four case directories is the stored
+  reference (committed). All other files in `case_*/` are generated and
+  ignored by git.
 
 ## Kernel command line
 
@@ -75,6 +82,10 @@ or
     python3 tests/regression/run_regression.py --binary bin/illumina
     python3 tests/regression/run_regression.py --binary bin/illumina \
         --case tests/regression/case_hill
+    python3 tests/regression/run_regression.py --binary bin/illumina \
+        --case tests/regression/case_cloud_hill
+    python3 tests/regression/run_regression.py --binary bin/illumina \
+        --case tests/regression/case_cloud_2nd
     python3 tests/regression/run_angles.py --binary bin/illumina
 
 The harness regenerates the inputs when `<case>/illumina.in` is
@@ -122,8 +133,8 @@ or
     make openmp
     python3 tests/regression/run_omp.py --serial bin/illumina --omp bin/illumina_omp
 
-`make test` runs this check on `case_small` and on `case_hill` after
-the serial checks when `bin/illumina_omp` exists. The kernel has one `!$omp parallel do`
+`make test` runs this check on all four cases after the serial checks
+when `bin/illumina_omp` exists. The kernel has one `!$omp parallel do`
 region: the loop over the source cells (`x_s`, `y_s`) inside each line
 of sight step and each lamp type in the scattered-radiance section of
 `kernel/illumina.f`. The serial build (`bin/illumina`) treats the
@@ -185,8 +196,12 @@ Notes:
 
 `make_case.py` accepts `--size N` (default 64), `--dx M` (default 100 m),
 `--pad 512` (embed the domain in a 512 x 512 zero array as the Python
-side does), `--double-scattering 0|1`, `--stop-limit X` and `--lamps N`
-(about N extra lamps on a regular grid, for timing cases; default 0).
+side does), `--double-scattering 0|1`, `--stop-limit X`, `--lamps N`
+(about N extra lamps on a regular grid, for timing cases; default 0)
+and `--cloud MODEL BASE_M FRACTION` (line 23 of `illumina.in`:
+`cloudt`, `cloudbase`, `cloudfrac`; default `0 0 0`, clear sky).
+`MODEL` is 0 for a clear sky, 1 thin cirrus, 2 thick cirrus, 3
+altostratus/altocumulus, 4 cumulus/cumulonimbus, 5 stratocumulus.
 
 For a timing case with many lamps:
 
@@ -243,8 +258,109 @@ and north of the observer cell), `--hill-lamps` (the eight-lamp layout
 above), `--obs-height Z` (default 10 m) and `--view ELEV AZIM` (default
 `30 45`).
 
-### Reference history
+## Cloudy cases
 
+Two cases run with a cloud layer (`cloudt` other than 0). The suite had
+no cloudy case before, so the cloud code path was never checked. The two
+upstream cloud fixes below changed the result of both cases.
+
+Generate them by hand with:
+
+    python3 tests/regression/make_case.py --out tests/regression/case_cloud_hill \
+        --hill 200 500 1060.7 1060.7 --hill-lamps --obs-height 0.2 \
+        --view 30 45 --cloud 3 1000 100
+    python3 tests/regression/make_case.py --out tests/regression/case_cloud_2nd \
+        --size 64 --view 80 45 --cloud 3 5000 100
+
+### `case_cloud_hill` (double counting of the cloud radiance)
+
+The hill case with an altostratus/altocumulus layer (model 3) at a base
+of 1000 m and a cloud fraction of 100 %. The viewing elevation rises
+from 3 deg to 30 deg, so the line of sight clears the summit and reaches
+the cloud base. The domain, the terrain and the eight lamps are the same
+as `case_hill`.
+
+The case covers the "cloud base detection in the line of sight" fix
+(upstream `e63f3e0`): the cloud intensity `icloud` entered the result
+twice, once through `isourc=isourc+icloud` and once through `fctcld`.
+The direct channels and the cloud radiance stay the same; the diffuse
+radiance and the contribution map change.
+
+| quantity | before the fix | after the fix | change |
+|----------|---------------:|--------------:|-------:|
+| irdirect | 1.552939e-04 | 1.552939e-04 | 0 |
+| irrdirect | 9.309442e-05 | 9.309442e-05 | 0 |
+| cloud | 4.082893e-05 | 4.082893e-05 | 0 |
+| diffuse | 2.013058e-04 | 4.271468e-05 | -78.8 % |
+| pcl(37,36) | 2.2812013e-02 | 3.3937421e-01 | x 14.9 |
+| pcl(37,38) | 4.3630410e-02 | 2.5877854e-01 | x 5.9 |
+| pcl(39,36) | 6.7651004e-02 | 2.8230387e-01 | x 4.2 |
+| pcl(24,51) | 2.5098833e-01 | 2.5995538e-02 | x 0.10 |
+| pcl(52,23) | 2.5450671e-01 | 7.1637584e-03 | x 0.028 |
+| pcl(46,48) | 1.3889244e-01 | 3.8579978e-02 | x 0.28 |
+| pcl(49,45) | 2.1796846e-01 | 4.1151989e-02 | x 0.19 |
+| pcl(51,50) | 3.5507083e-03 | 6.6520600e-03 | x 1.9 |
+
+The second cloud fix (upstream `1c46ee1`) leaves this case unchanged:
+with a cloud base of 1000 m no second order scattering voxel reaches the
+cloud.
+
+### `case_cloud_2nd` (wrong flux in the cloud radiance after a first scattering)
+
+Flat terrain, 64 x 64 cells of 100 m, the default six lamps of
+`case_small`, an altostratus/altocumulus layer (model 3) at a base of
+5000 m, a cloud fraction of 100 % and a viewing elevation of 80 deg.
+This is the only configuration found that reaches the
+reflection-then-second-scattering cloud block: the steep view keeps the
+line of sight inside the domain up to the cloud base, and the high base
+leaves room for a second scattering voxel below the cloud.
+
+The case covers both fixes. The first fix removes the double counting;
+the second fix replaces `fldif2` (the flux at the scattering voxel) by
+`fdif2` (the flux at the line of sight voxel) in the cloud term, which
+is the flux that illuminates a cloud on the sight line.
+
+| quantity | before the fixes | after fix 1 | after fix 1 + fix 2 |
+|----------|-----------------:|------------:|--------------------:|
+| irdirect | 1.095854e-04 | 1.095854e-04 | 1.095854e-04 |
+| irrdirect | 3.908474e-09 | 3.908474e-09 | 3.908474e-09 |
+| cloud | 7.764644e-06 | 7.764644e-06 | 8.815393e-07 |
+| diffuse | 3.553758e-05 | 8.349037e-06 | 1.465932e-06 |
+
+Fix 1 alone lowers the diffuse radiance by 76.5 %. Fix 2 then lowers the
+cloud radiance by 88.6 % and the diffuse radiance by a further 82.4 %.
+
+### Serial and OpenMP
+
+The four cloud proximity tests of the first fix relax from
+`cloudbase-z_c .le. iz*scal` to `.le. 1.20*iz*scal`. Neither new case
+measures that part: a build with the old test gives the same cloud
+radiance and the same diffuse radiance on both cases. The other parts of
+the first fix carry the whole change.
+
+The OpenMP region keeps the cloud path on one thread (`if(cloudt.eq.0)`
+clause), because `icloud` is a running sum that the loop also reads. The
+two cloudy cases are therefore a check that the serial and the OpenMP
+builds still agree. They do: the 1-thread run is byte-identical to the
+serial run and the 4-thread run has a maximum relative difference of
+0.0e+00 on both cases.
+
+## Reference history
+
+- The `.out` summary format changed from `E10.3E2` to `E14.7E2`
+  (upstream `e63f3e0`), so `case_small/reference.json` and
+  `case_hill/reference.json` were rebuilt on 2026-09-18 from the patched
+  serial kernel. The refresh is a precision change only:
+  - every one of the twelve stored numbers, rounded back to the old
+    `E10.3E2` form, gives exactly the old stored value (for example
+    `case_hill` diffuse 9.2855650e-05 -> 0.929E-04 = 9.29e-05, direct
+    1.0575880e-02 -> 0.106E-01 = 1.06e-02),
+  - `pcl_shape` and every entry of `pcl_nonzero` are unchanged, and
+    `synth_pcl.bin` is byte-identical to the pre-patch run for both
+    clear-sky cases.
+- `case_cloud_hill/reference.json` and `case_cloud_2nd/reference.json`
+  (2026-09-18) are new. They are built from the patched serial kernel
+  (both cloud fixes applied); there is no earlier reference to preserve.
 - `case_small/reference.json` is built from `main` (e33b0f4, `master` 56745d2 merged with `updated_batches`). It is bit-identical to the earlier `master` reference.
 - `case_hill/reference.json` (2026-09-14) is built from the `ai-update`
   serial kernel with the observer horizon fix (#59, variable `zhorob`).

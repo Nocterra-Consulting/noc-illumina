@@ -116,7 +116,10 @@ def write_illumina_in(filename, basenm, dx, x_obs, y_obs, args):
         input_line([""], ""),
         input_line([""], ""),
         input_line([9.99], "Radius around light sources where reflextions are computed"),
-        input_line([0, 0, 0], "Cloud model (0=clear) ; Cloud base altitude [m] ; Cloud fraction"),
+        input_line(
+            [int(args.cloud[0]), args.cloud[1], args.cloud[2]],
+            "Cloud model (0=clear) ; Cloud base altitude [m] ; Cloud fraction",
+        ),
         input_line([""], ""),
     ]
     with open(filename, "w") as f:
@@ -175,6 +178,17 @@ def main(argv=None):
         metavar=("ELEV_DEG", "AZIM_DEG"),
         default=[30.0, 45.0],
         help="viewing elevation and geographic azimuth [deg] (line 17 of illumina.in)",
+    )
+    ap.add_argument(
+        "--cloud",
+        type=float,
+        nargs=3,
+        metavar=("MODEL", "BASE_M", "FRACTION"),
+        default=[0.0, 0.0, 0.0],
+        help="cloud line of illumina.in: model (0=clear, 1=thin cirrus, "
+        "2=thick cirrus, 3=altostratus/altocumulus, 4=cumulus/cumulonimbus, "
+        "5=stratocumulus), cloud base altitude [m] and cloud fraction [%%] "
+        "(default: 0 0 0, clear sky)",
     )
     ap.add_argument("--basenm", default="synth")
     args = ap.parse_args(argv)
@@ -290,6 +304,9 @@ def main(argv=None):
     if args.hill is not None:
         print("Hill: %g m, sigma %g m, centre (%g, %g) m; terrain at the observer %.1f m, max %.1f m"
               % (args.hill[0], args.hill[1], args.hill[2], args.hill[3], topo[c, c], topo.max()))
+    if int(args.cloud[0]) != 0:
+        print("Cloud: model %d, base %g m, fraction %g %%"
+              % (int(args.cloud[0]), args.cloud[1], args.cloud[2]))
     print("Lamps: %d cells, observer cell (x=%d, y=%d)" % (np.count_nonzero(lumlp), x_obs, y_obs))
 
 
