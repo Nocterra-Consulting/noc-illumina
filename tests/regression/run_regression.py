@@ -61,6 +61,32 @@ def parse_out(path):
     return dict(zip(LABELS, values))
 
 
+def parse_los(path):
+    """Return the line-of-sight step count and the furthest horizontal distance.
+
+    A DUG comparison found the step count a cleaner observable of terrain
+    blocking than any radiance: where the observer horizon was mishandled,
+    the sight line ran out to the sources instead of stopping at the ridge,
+    and the step count showed it plainly while the radiance only showed a
+    ratio. Returns (None, None) when the log has no progression lines, which
+    is the case for a quiet run.
+    """
+    steps, furthest = 0, None
+    with open(path, errors="replace") as f:
+        for line in f:
+            if "Progression along the line of sight" in line:
+                steps += 1
+            elif "Horizontal dist. line of sight" in line:
+                # "  Horizontal dist. line of sight =   29.5993938      m"
+                try:
+                    furthest = float(line.rsplit("=", 1)[1].replace("m", "").strip())
+                except (IndexError, ValueError):
+                    pass
+    if steps == 0:
+        return None, None
+    return steps, furthest
+
+
 def read_bin(path):
     """Read an ILLUMINA 2-D binary; return (nbx, nby, dict '(i,j)'->value).
 
@@ -98,6 +124,11 @@ def run_case(binary, case, timeout):
         "summary": parse_out(os.path.join(case, basenm + ".out")),
         "wall_time_s": round(wall, 3),
     }
+    los_steps, los_dist = parse_los(os.path.join(case, "run.log"))
+    if los_steps is not None:
+        result["los_steps"] = los_steps
+        if los_dist is not None:
+            result["los_max_dist_m"] = round(los_dist, 2)
     pcl = os.path.join(case, basenm + "_pcl.bin")
     if os.path.exists(pcl):
         nbx, nby, nz = read_bin(pcl)
@@ -118,6 +149,14 @@ def compare(result, ref, rtol, atol):
         good = close(n, r, rtol, atol)
         ok &= good
         rows.append((k, r, n, good))
+    # Only when this run produced a log. run_angles.py drives the kernel
+    # itself and compares the result through here, so it has no log of its
+    # own; the step count is checked on the runs this script makes.
+    if "los_steps" in ref and result.get("los_steps") is not None:
+        r, n = ref["los_steps"], result["los_steps"]
+        good = (n == r)
+        ok &= good
+        rows.append(("los_steps", r, n, good))
     ref_pcl = ref.get("pcl_nonzero")
     if ref_pcl is not None:
         new_pcl = result.get("pcl_nonzero", {})

@@ -273,6 +273,14 @@ finding and not an expected change.
 | `case_cloud_hill` | diffuse radiance -78.8 %; the map moves between x0.028 and x14.9 | cloud double count (upstream `e63f3e0`) | `case_cloud_hill` below |
 | `case_cloud_2nd` | cloud radiance -88.6 % and diffuse -95.9 % against `main` (the second fix accounts for -82.4 % of it, on top of the first) | both cloud fixes | `case_cloud_2nd` below |
 
+The cleanest observable of terrain behaviour is the line-of-sight step
+count, not any radiance. The harness records it as `los_steps` (with the
+furthest horizontal distance as `los_max_dist_m`) and compares it
+exactly, so a change in where the sight line stops is reported before
+any number moves. On a real scenario the same signal was decisive: at
+0.4 and 0.8 degrees elevation `main` ran the sight line out to 2.2 and
+2.5 km, into the sources, where the fixed kernel stops at 30 m.
+
 Two traps when comparing:
 
 - `main` prints the summary with `E10.3E2`, three significant figures,
