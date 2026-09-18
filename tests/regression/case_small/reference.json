@@ -1,7 +1,7 @@
 {
   "binary": "/home/egcharlton/git/noc-illumina/bin/illumina",
-  "created": "2026-09-14 13:03:34",
-  "git_commit": "e33b0f4",
+  "created": "2026-09-18 09:31:59",
+  "git_commit": "4c90cb0",
   "make_case_args": [],
   "pcl_nonzero": {
     "29,36": 0.0005502590211108327,
@@ -17,11 +17,11 @@
   ],
   "summary": {
     "cloud": 0.0,
-    "diffuse": 9.03e-05,
-    "direct": 0.0285,
-    "irdirect": 0.00017,
-    "irrdirect": 2.14e-08,
+    "diffuse": 9.029627e-05,
+    "direct": 0.02850366,
+    "irdirect": 0.0001704847,
+    "irrdirect": 2.144338e-08,
     "rdirect": 0.0
   },
-  "wall_time_s": 3.069
+  "wall_time_s": 0.515
 }

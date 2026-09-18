@@ -219,7 +219,6 @@ c                                                                         ! a li
       real azencl                                                         ! zenith angle from cloud to observer
       real icloud                                                         ! cloud reflected intensity
       real fcloud                                                         ! flux reaching the intrument from the cloud voxel
-      real fccld                                                          ! correction for the FOV to the flux reaching the intrument from the cloud voxel
       real fctcld                                                         ! total flux from cloud at the sensor level
       real totlu(nzon)                                                    ! total flux of a source type
       real stoplim                                                        ! Stop computation when the new voxel contribution is less than 1/stoplim of the cumulated flux
@@ -846,7 +845,6 @@ c Initialisation of the per-pointing accumulators, arrays and variables
         fldif1=0.
         fldif2=0.
         portio=0.
-        fccld=0.
         fctcld=0.
         ometif=0.
         hh=1.
@@ -1251,6 +1249,7 @@ c temporaire !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         ry_c=real(y_obs)*dx-iy*scal/2.
         z_c=z_obs-iz*scal/2.
         do icible=1,ncible                                                ! beginning of the loop over the line of sight voxels
+          icloud=0.
           rx_c=rx_c+ix*(scalo/2.+scal/2.)
           ry_c=ry_c+iy*(scalo/2.+scal/2.)
         dh0=sqrt((rx_c-rx_obs)**2.+(ry_c-ry_obs)**2)
@@ -1265,7 +1264,8 @@ c temporaire !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
           z_c=z_c+iz*(scalo/2.+scal/2.)
           if (z_c.gt.altsol(x_c,y_c)) then
           if ((fcapt.ge.ftocap/stoplim).and.(z_c.lt.cloudbase).and.       ! stop the calculation of the viewing line when the increment is lower than 1/stoplim
-     +    (z_c.lt.35000.)) then                                           ! or when hitting a cloud or when z>40km (scattering probability =0 (given precision)
+     +    (z_c.lt.35000.)) then                                           ! or when hitting a cloud or when z>35km (scattering probability =0 (given precision)
+            fctcld=0.
             fcapt=0.
             do i=1,nbx
               do j=1,nby
@@ -1455,7 +1455,7 @@ c computation of the source contribution to the scattered intensity toward the s
                               intdir=fldir*pdifdi
 c contribution of the cloud reflection of the light coming directly from the source
                               if (cloudt.ne.0) then                       ! line of sight voxel = cloud
-                                if (cloudbase-z_c.le.iz*scal) then
+                                if (cloudbase-z_c.le.1.20*iz*scal) then
                                   call anglezenithal(rx_c,ry_c,z_c,
      +                            rx_obs,ry_obs,z_obs,azcl1)              ! zenith angle from cloud to observer
                                   call anglezenithal(rx_c,ry_c,z_c,
@@ -1740,7 +1740,7 @@ c computation of the scattered flux reaching the line of sight voxel
             fdif2=idif2*omega*transm*transa*transl*(1.-ff)*hh
 c cloud contribution for double scat from a reflecting pixel
             if (cloudt.ne.0) then                                         ! line of sight voxel = cloud
-              if (cloudbase-z_c.le.iz*scal) then
+              if (cloudbase-z_c.le.1.20*iz*scal) then
                 call anglezenithal(rx_c,ry_c,z_c,
      +          rx_obs,ry_obs,z_obs,azcl1)                                ! zenith angle from cloud to observer
                 call anglezenithal(rx_c,ry_c,z_c,
@@ -1867,7 +1867,7 @@ c computation of the scattered flux reaching the line of sight voxel
               fldiff=idif1*omega*transm*transa*transl*(1.-ff)*hh
 c cloud contribution to the double scattering from a source
               if (cloudt.ne.0) then                                       ! line of sight voxel = cloud
-                if (cloudbase-z_c.le.iz*scal) then
+                if (cloudbase-z_c.le.1.20*iz*scal) then
                   call anglezenithal(rx_c,ry_c,z_c,
      +            rx_obs,ry_obs,z_obs,azcl1)                              ! zenith angle from cloud to observer
                   call anglezenithal(rx_c,ry_c,z_c,
@@ -1973,7 +1973,7 @@ c computation of the flux reflected reaching the line of sight voxel
      +                                    transa*transl*(1.-ff)*hh        ! obstacles correction
 c cloud contribution to the reflected light from a ground pixel
                               if (cloudt.ne.0) then                       ! line of sight voxel = cloud
-                                if (cloudbase-z_c.le.iz*scal) then
+                                if (cloudbase-z_c.le.1.20*iz*scal) then
                                   call anglezenithal(rx_c,ry_c,z_c,
      +                            rx_obs,ry_obs,z_obs,azcl1)              ! zenith angle from cloud to observer
                                   call anglezenithal(rx_c,ry_c,z_c,
@@ -2022,7 +2022,7 @@ c refl->1st scat->2nd scat
                             isourc=isourc*scal                            ! scaling the values according to the path length in the l. of sight voxel of 1m3
                             isourc=isourc*portio                          ! correct for the field of view of the observer
 c include clouds in the total intensity
-                            isourc=isourc+icloud
+c                            isourc=isourc+icloud
 
 
         if ((itodif.lt.0.).or.(itotrd.lt.0.)) then
@@ -2113,8 +2113,7 @@ c end of the computation of the flux reaching the observer voxel from the line o
 c correction for the FOV to the flux reaching the intrument from the cloud voxel
             if (cloudt.ne.0) then
 c computation of the flux reaching the intrument from the cloud voxel
-                fccld=icloud*ometif*transa*transm*transl
-                fctcld=fctcld+fccld                                       ! cloud flux for all source all type all line of sight element
+                fctcld=icloud*ometif*transa*transm*transl               ! cloud flux for all source all type all line of sight element
             endif
             if (verbose.ge.1) print*,'Added radiance =',
      +      fcapt/omefov/(pi*(diamobj/2.)**2.)
@@ -2227,7 +2226,7 @@ c <root>_e<elev>_a<azim>_result.txt) and the combined record (unit 4)
       enddo                                                               ! end of the loop over the pointings
       close(4)
  2002 format(A,'=',ES14.6E2)
- 2001 format('                   ',E10.3E2)
+ 2001 format('                   ',E14.7E2)
       stop
       end
 c***********************************************************************
