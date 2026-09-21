@@ -127,7 +127,7 @@ def batches(
                 clipped.set_buffer(0)
                 clipped.set_overlap(0)
             for i, dat in enumerate(clipped):
-                padded_dat = np.pad(dat, (512 - dat.shape[0]) // 2, "constant")
+                padded_dat = np.pad(dat, pad_width(dat.shape[0]), "constant")
                 save_bin(
                     "obs_data/%6f_%6f/%i/%s"
                     % (lat, lon, i, fname.rsplit(".", 1)[0] + ".bin"),
@@ -358,8 +358,24 @@ def param_generate(local_params, multival, params, brng, compact, dir_name, wls,
             f.write(f"mv {exp_name}_pcl.bin {exp_name}_pcl_{unique_ID}.bin\n")
     # return [exe_input, exe_output, exe_location]
 
+def pad_width(n):
+    """Number of cells added on each side of an observer extract of n cells.
+
+    Extracts smaller than 512 cells are padded to 511 cells, the size the
+    fixed-array kernel needed. Larger extracts are written as they are.
+    """
+    return max(0, (512 - n) // 2)
+
+
+def observer_index(ds, layer):
+    """1-based index of the observer cell in the padded extract of a layer."""
+    n = 2 * (ds._attrs["nb_pixels"] + ds._attrs["layers"][layer]["buffer"]) + 1
+    return (n + 2 * pad_width(n) + 1) // 2
+
+
 def create_illumina_in(exp_name, layer, ds, P, wavelength, reflectance, bandwidth, lamps, bearing):
     # Create illumina.in
+    obs_index = observer_index(ds, layer)
     input_data = (
         (("", "Input file for ILLUMINA"),),
         ((exp_name, "Root file name"),),
@@ -388,8 +404,8 @@ def create_illumina_in(exp_name, layer, ds, P, wavelength, reflectance, bandwidt
         ((P["stop_limit"], "Contribution threshold"),),
         (("", ""),),
         (
-            (256, "Observer X position"),
-            (256, "Observer Y position"),
+            (obs_index, "Observer X position"),
+            (obs_index, "Observer Y position"),
             (P["observer_elevation"], "Observer elevation above ground [m]"),
         ),
         ((P["observer_obstacles"] * 1, "Obstacles around observer"),),
