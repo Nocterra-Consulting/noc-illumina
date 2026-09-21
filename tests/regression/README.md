@@ -95,6 +95,39 @@ exclusion radius are outside the valid range of the model. A case built
 with `make_case.py --dx 5` triggers the warning; the four regression
 cases (100 m cells) do not.
 
+## Observer ground elevation
+
+By default the observer stands on the domain elevation array:
+`z_obs = z_o + altsol(x_obs,y_obs)`. That array is the DEM coarsened to
+the cell size, so a change of the cell size moves the observer's
+altitude over sloping ground (measured on a real site: 3.83 m at 2 m
+cells, 3.75 m at 10 m, 3.47 m at 50 m). Better terrain data does not
+remove this effect; it is one more path from the cell size to the
+result.
+
+An optional 26th line of the parameter file, `obs_ground_m`, sets the
+absolute ground elevation at the observer in metres, taken from the
+finest available DEM. When the line is present the kernel uses
+`z_obs = z_o + obs_ground_m` and prints one `INFO` line to stdout and
+to the `.out` header with both the grid value and the override:
+
+    INFO: observer ground elevation from line 26 = <override> m; domain grid gives <altsol> m
+
+Rules:
+
+- A file without the line keeps the default and gives bit-identical
+  results.
+- The 26th line can only follow a 25th line. Write `10` on the 25th
+  line (the default exclusion radius) when you need only the 26th.
+- A value that is not finite, below -500 m or above 9000 m stops the
+  kernel with `stop 1`.
+- The override moves the observer only. The terrain that blocks the
+  line of sight is still the coarsened array.
+
+Deriving `obs_ground_m` from the finest DEM at setup time and writing
+the line into the parameter file is a follow-up in the nalmp repository;
+the kernel side is complete with this line.
+
 ## Run the check
 
     make test

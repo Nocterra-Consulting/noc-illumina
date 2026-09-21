@@ -241,6 +241,8 @@ c                                                                         ! a li
       integer step                                                        ! skiping 2nd scat on 1 dim
       real omemax                                                         ! max solid angle allowed
       real exclrad                                                        ! near-field exclusion radius (m): source-voxel pairs closer than this are dropped
+      real obsgrd                                                         ! observer ground elevation override (m, absolute), optional 26th line
+      logical obsovr                                                      ! .true. when the 26th line is present
       real tcloud                                                         ! low cloud transmission
       real rx_sp,ry_sp                                                    ! position of a low cloud pixel
       real, allocatable :: flcld(:,:)                                            ! flux crossing a low cloud
@@ -337,10 +339,27 @@ c optional trailing line: near-field exclusion radius (m). A file
 c without that line keeps the historical 10 m.
         read(1,*,iostat=ios) exclrad
         if (ios.ne.0) exclrad=10.
+c optional 26th line (only after a 25th): absolute ground elevation at
+c the observer (m) from the finest DEM. Without it the observer stands
+c on the coarsened domain elevation altsol(x_obs,y_obs).
+        obsovr=.false.
+        obsgrd=0.
+        if (ios.eq.0) then
+          read(1,*,iostat=ios) obsgrd
+          if (ios.eq.0) obsovr=.true.
+        endif
       close(1)
       if (exclrad.le.0.) then
         print*,'Error: exclusion radius must be positive, got',exclrad
         stop 1
+      endif
+      if (obsovr) then
+        if ((obsgrd.ne.obsgrd).or.(obsgrd.lt.-500.).or.
+     +  (obsgrd.gt.9000.)) then
+          print*,'Error: observer ground elevation (line 26) must be',
+     +    ' finite and between -500 and 9000 m, got',obsgrd
+          stop 1
+        endif
       endif
 c NEW CHANGE HERE: optional third argument = angles list file. One
 c pointing per line 'elevation_deg azimuth_deg' (geographic azimuth,
@@ -783,7 +802,13 @@ c flux arrays (lumlp)
         enddo                                                             ! end of the loop 1 over the nzon types of sources.
         dy=dx
         omefov=0.00000001                                                 ! solid angle of the spectrometer slit on the sky. Here we only need a small value
-        z_obs=z_o+altsol(x_obs,y_obs)                                     ! z_obs = the local observer elevation plus the height of observation above ground (z_o)
+        if (obsovr) then
+          z_obs=z_o+obsgrd                                                ! observer ground from the parameter file (finest DEM), not the coarsened grid
+          print*,'INFO: observer ground elevation from line 26 =',
+     +    obsgrd,' m; domain grid gives',altsol(x_obs,y_obs),' m'
+        else
+          z_obs=z_o+altsol(x_obs,y_obs)                                   ! z_obs = the local observer elevation plus the height of observation above ground (z_o)
+        endif
         rx_obs=real(x_obs)*dx
         ry_obs=real(y_obs)*dy
         if (z_obs.eq.0.) z_obs=0.001
@@ -854,6 +879,10 @@ c opening output file
         write(2,*) '2nd order scattering radius:',effdif,' m'
         print*,'2nd order scattering radius:',effdif,' m'
         write(2,*) 'Observer position (x,y,z)',x_obs,y_obs,z_o
+        if (obsovr) then
+          write(2,*) 'INFO: observer ground elevation from line 26 =',
+     +    obsgrd,' m; domain grid gives',altsol(x_obs,y_obs),' m'
+        endif
         print*,'Observer position (x,y,z)',x_obs,y_obs,z_o
         write(2,*) 'Elevation angle:',angvis,' azim angle (counterclockwise
      +from east)',azim
