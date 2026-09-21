@@ -247,6 +247,8 @@ c                                                                         ! a li
       real ds1,ds2,ds3,dss                                                ! double scattering distances
       integer nss                                                         ! number of skipped 2nd scat elements
       integer ndi                                                         ! number of cell under ground
+      integer ncl                                                         ! number of 2nd scat cells above the cloud base (and otherwise valid)
+      integer cldwarn                                                     ! 1 when the cloud base discarded every 2nd scat cell at least once in this pointing
       integer nvol                                                        ! number of cell for second scat calc un full resolution
       real diamobj                                                        ! instrument objective diameter
       integer i,j,k,id,jd
@@ -861,6 +863,7 @@ c opening output file
         write(2,*) 'latitu center:',latitu
 c Initialisation of the per-pointing accumulators, arrays and variables
         prmaps=wrmaps
+        cldwarn=0
         iun=0
         ideux=1
         icloud=0.
@@ -1388,7 +1391,7 @@ c loop runs on one thread when clouds are on (if clause). pi is a
 c parameter and cannot appear in a clause.
 !$omp parallel do default(none) if(cloudt.eq.0)
 !$omp& collapse(2) schedule(dynamic,4)
-!$omp& reduction(+:itotty)
+!$omp& reduction(+:itotty) reduction(max:cldwarn)
 !$omp& shared(imin,imax,jmin,jmax,stype,ntype,nbx,nby,dx,dy,altsol,
 !$omp& lampal,lamplu,drefle,obsH,ofill,inclix,incliy,pvalno,rx_c,ry_c,
 !$omp& z_c,rx_obs,ry_obs,z_obs,haer,hlay,tranam,tranaa,tranal,tabs,un,
@@ -1396,7 +1399,8 @@ c parameter and cannot appear in a clause.
 !$omp& reflsiz,srefl,effdif,zondif,ndiff,stepdi,siz,dss,cloudt,
 !$omp& cloudbase,iz,scal,verbose,ITT,icloud)
 !$omp& private(x_s,y_s,x_sr,y_sr,idi,na,naz,anglez,dirck,xsrmi,xsrma,
-!$omp& ysrmi,ysrma,x_dif,y_dif,id,jd,nss,ndi,rx_s,ry_s,z_s,rx_sr,ry_sr,
+!$omp& ysrmi,ysrma,x_dif,y_dif,id,jd,nss,ndi,ncl,rx_s,ry_s,z_s,rx_sr,
+!$omp& ry_sr,
 !$omp& z_sr,rx_dif,ry_dif,z_dif,distd,dho,angzen,angazi,zhoriz,dh,hh,
 !$omp& ff,angmin,transm,transa,transl,omega,P_dir,P_indir,P_dif1,fldir,
 !$omp& angdif,pdifdi,intdir,azcl1,azcl2,doc2,dsc2,rcloud,itotind,
@@ -1664,6 +1668,7 @@ c ******************************************************************************
                                         if (effdif.gt.0.) then
       nss=0
       ndi=0
+      ncl=0
       do idi=1,ndiff                                                      ! beginning of the loop over the scattering voxels.
         rx_dif=zondif(idi,1)+(rx_s+rx_c)/2.
         x_dif=nint(rx_dif/dx)
@@ -1679,6 +1684,8 @@ c ******************************************************************************
         if (z_dif-siz/2..le.altsol(id,jd).or.(z_dif.gt.35000.).or.
      +  (z_dif.gt.cloudbase)) then                                        ! beginning diffusing cell underground
           ndi=ndi+1
+          if ((z_dif-siz/2..gt.altsol(id,jd)).and.(z_dif.le.35000.))
+     +    ncl=ncl+1                                                       ! discarded by the cloud base only
         else
           ds1=sqrt((rx_sr-rx_dif)**2.+(ry_sr-ry_dif)**2.+
      +    (z_sr-z_dif)**2.)
@@ -1939,6 +1946,9 @@ c computing scattered intensity toward the observer from the line of sight voxel
           endif                                                           ! end of the case scattering pos = Source pos or line of sight pos
         endif                                                             ! end diffusing celle underground
       enddo                                                               ! end of the loop over the scattering voxels.
+c every scattering cell was discarded and the cloud base removed the
+c ones above ground: 2nd order scattering is off for this geometry
+      if ((ndi.eq.ndiff).and.(ncl.gt.0)) cldwarn=1
                                         endif                             ! end of the condition ou effdif > 0
 c End of 2nd scattered intensity calculations
 c===================================================================
@@ -2170,6 +2180,14 @@ c           print*,'End of line of sight - touching the ground'
         endif                                                             ! line of sight not blocked by topography
         enddo                                                             ! end of the loop over the line of sight voxels.
         fctcld=fctcld*10**(0.4*(100.-cloudfrac)*cloudslope)               ! correction for the cloud fraction (defined from 0 to 100)
+        if (cldwarn.eq.1) then
+          print*,'WARNING: the second-order scattering volume lies',
+     +    ' entirely above the cloud base',cloudbase,' m: second',
+     +    ' order scattering is off for this pointing.'
+          write(2,*) 'WARNING: the second-order scattering volume lies',
+     +    ' entirely above the cloud base',cloudbase,' m: second',
+     +    ' order scattering is off for this pointing.'
+        endif
         if (prmaps.eq.1) then
 c          open(unit=9,file=pclf,status='unknown')
             do x_s=1,nbx

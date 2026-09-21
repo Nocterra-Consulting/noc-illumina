@@ -368,7 +368,12 @@ radiance and the contribution map change.
 
 The second cloud fix (upstream `1c46ee1`) leaves this case unchanged:
 with a cloud base of 1000 m no second order scattering voxel reaches the
-cloud.
+cloud. The kernel now says so: it prints one `WARNING: the second-order
+scattering volume lies entirely above the cloud base` line per pointing
+to stdout and to the `.out` file when every second order scattering cell
+above ground is discarded by the cloud base (#77). The line appears on
+this case only; the clear-sky cases and `case_cloud_2nd` (base 5000 m)
+do not print it, and the references are unchanged.
 
 ### `case_cloud_2nd` (wrong flux in the cloud radiance after a first scattering)
 
