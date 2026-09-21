@@ -262,7 +262,9 @@ above), `--obs-height Z` (default 10 m) and `--view ELEV AZIM` (default
 
 `main` is the pre-refactor kernel (`master` merged with the DUG
 `updated_batches` build). Three fixes separate it from `ai-update`, and
-between them they account for every difference the four cases show. If a
+between them they account for every difference the four cases showed
+before the reflection disc change (#90, see "Reference history"), which
+now also moves the reflected channels on every case. If a
 comparison against `main` turns up anything outside this table, it is a
 finding and not an expected change.
 
@@ -387,6 +389,125 @@ serial run and the 4-thread run has a maximum relative difference of
 
 ## Reference history
 
+- All four `reference.json` were rebuilt on 2026-09-22 from the serial
+  kernel after the reflection disc change (#90). Before the change the
+  reflection box was `boxx=nint(reflsiz/dx)` cells wide, a step
+  function of `dx` (one cell above `dx=2*reflsiz`, nine cells from
+  `2/3*reflsiz` to `2*reflsiz`, 25 below), and only the source cell
+  used the sub-grid side `reflsiz`; every neighbour reflected with its
+  full area `dx*dy`. At `dx=10` and `reflsiz=9.99` the reflecting area
+  was 99.8 + 8 x 100 = 900 m2 for a parameter that asks for a 10 m
+  radius. The kernel now treats the reflecting region as the disc of
+  radius `reflsiz` centred on the source: the box covers the disc
+  (`boxx=ceiling(reflsiz/dx)`), and each cell in the box reflects with
+  the fraction of its area inside the disc (`discfrac`, analytic), as a
+  square of side `dx*sqrt(afrac)`. The source cell follows the same
+  rule, so the total reflecting area is `pi*reflsiz**2` for every cell
+  size. Checks made with the change:
+
+  - `case_small` at `dx=100`, `reflsiz` swept over 5, 9.99, 30, 60, 90,
+    160 (serial build, `irrdirect` / `diffuse`):
+
+    | reflsiz | old irrdirect | new irrdirect | old diffuse | new diffuse |
+    |--------:|--------------:|--------------:|------------:|------------:|
+    | 5 | 5.372469e-09 | 1.687611e-08 | 8.985140e-05 | 9.017894e-05 |
+    | 9.99 | 2.144338e-08 | 6.730727e-08 | 9.029627e-05 | 9.098759e-05 |
+    | 30 | 1.928516e-07 | 6.023938e-07 | 9.167710e-05 | 9.219757e-05 |
+    | 60 | 1.435750e-05 | 2.319441e-06 | 9.245966e-05 | 9.250508e-05 |
+    | 90 | 1.529045e-05 | 4.886324e-06 | 9.261908e-05 | 9.251531e-05 |
+    | 160 | 3.422712e-05 | 1.405974e-05 | 9.276698e-05 | 9.263289e-05 |
+
+    The old `irrdirect` jumps by a factor 74 between 30 and 60 (the
+    box opens from one cell to nine) and again at 160 (25 cells). The
+    new `irrdirect` is smooth and monotone; `irrdirect/reflsiz**2` goes
+    6.8e-10, 6.7e-10, 6.7e-10, 6.4e-10, 6.0e-10, 5.5e-10 (a slow fall
+    from the lamp photometry, no step).
+  - Flat twin of the hill case (`--hill 0 500 1060.7 1060.7
+    --hill-lamps --obs-height 1.5 --view 30 45`, eight lamps placed in
+    metres so the lamp set is the same at every cell size) at
+    `dx=100, 50, 25, 10` (`--size 6400/dx`). `irrdirect` at a fixed
+    `reflsiz`, old -> new:
+
+    | reflsiz | dx=100 | dx=50 | dx=25 | dx=10 |
+    |--------:|-------:|------:|------:|------:|
+    | 9.99 old | 1.023e-04 | 1.101e-04 | 1.134e-04 | 3.203e-04 |
+    | 9.99 new | 2.119e-04 | 2.281e-04 | 2.349e-04 | 1.832e-04 |
+    | 30 old | 3.192e-04 | 3.796e-04 | 4.263e-04 | 4.109e-04 |
+    | 30 new | 4.003e-04 | 4.205e-04 | 3.760e-04 | 3.904e-04 |
+    | 60 old | 4.258e-04 | 4.605e-04 | 4.413e-04 | 4.311e-04 |
+    | 60 new | 4.475e-04 | 4.428e-04 | 4.364e-04 | 4.272e-04 |
+
+    The reflected part of the diffuse radiance (`diffuse(reflsiz)`
+    minus `diffuse(0.001)`), new kernel: 2.42e-06, 2.36e-06, 2.42e-06,
+    1.90e-06 at 9.99; 4.57e-06, 4.36e-06, 3.88e-06, 4.04e-06 at 30;
+    5.11e-06, 4.59e-06, 4.50e-06, 4.42e-06 at 60. The old kernel gave
+    1.17e-06, 1.14e-06, 1.17e-06, 3.32e-06 at 9.99 (x2.8 between
+    `dx=100` and `dx=10`). The new result is constant across `dx` to
+    within 13 % at 9.99, 6 % at 30 and 2.5 % at 60; the remaining
+    spread is the cell-centre discretisation of a 10 m high lamp. The
+    contribution per unit `reflsiz**2` is not constant across
+    `reflsiz` on this case: the lamps are 10 m high with a downward
+    photometry, so the ground irradiance saturates beyond about 10 m.
+  - Size of the change on the four cases (old reference -> new
+    reference, serial build). `irdirect` and `direct` are unchanged on
+    every case.
+
+    | case | quantity | old | new | change |
+    |------|----------|----:|----:|-------:|
+    | `case_small` | irrdirect | 2.1443380e-08 | 6.7307270e-08 | x 3.14 |
+    | | diffuse | 9.0296270e-05 | 9.0987590e-05 | +0.8 % |
+    | | los_steps | 22 | 24 | stop criterion moved |
+    | | pcl(29,36) | 5.5025902e-04 | 1.0481671e-03 | +90 % |
+    | | pcl(31,28) | 3.8446407e-04 | 7.4386160e-04 | +93 % |
+    | | pcl(34,38) | 2.1928316e-03 | 3.9066863e-03 | +78 % |
+    | | pcl(36,30) | 1.2836505e-03 | 2.3565716e-03 | +84 % |
+    | | pcl(37,36) | 9.9020159e-01 | 9.8269689e-01 | -0.8 % (mast) |
+    | | pcl(38,35) | 5.3871297e-03 | 9.2478590e-03 | +72 % |
+    | `case_hill` | irrdirect | 1.0371790e-04 | 2.1556250e-04 | x 2.08 |
+    | | rdirect | 7.2969160e-03 | 1.5147860e-02 | x 2.08 |
+    | | diffuse | 9.2855650e-05 | 1.1834080e-04 | +27 % |
+    | | pcl(24,51) | 4.9881542e-06 | 7.9156462e-06 | +59 % |
+    | | pcl(37,36) | 9.1420996e-01 | 9.1044128e-01 | -0.4 % |
+    | | pcl(37,38) | 4.1023631e-02 | 4.2822793e-02 | +4.4 % |
+    | | pcl(39,36) | 4.4753052e-02 | 4.6715781e-02 | +4.4 % |
+    | | pcl(46,48) | 9.1573844e-07 | 1.1874182e-06 | +30 % |
+    | | pcl(49,45) | 9.7678719e-07 | 1.2665809e-06 | +30 % |
+    | | pcl(51,50) | 1.0552055e-06 | 1.3565627e-06 | +29 % |
+    | | pcl(52,23) | 5.3718609e-06 | 8.5245429e-06 | +59 % |
+    | `case_cloud_hill` | irrdirect | 9.3094420e-05 | 1.9348400e-04 | x 2.08 |
+    | | cloud | 4.0828930e-05 | 6.5228840e-05 | +60 % |
+    | | diffuse | 4.2714680e-05 | 6.8425990e-05 | +60 % |
+    | | pcl(24,51) | 6.6520600e-03 | 7.4333455e-03 | +12 % |
+    | | pcl(37,36) | 3.3937421e-01 | 3.3871546e-01 | -0.2 % |
+    | | pcl(37,38) | 2.5877854e-01 | 2.5817788e-01 | -0.2 % |
+    | | pcl(39,36) | 2.8230387e-01 | 2.8164867e-01 | -0.2 % |
+    | | pcl(46,48) | 3.8579978e-02 | 3.8508479e-02 | -0.2 % |
+    | | pcl(49,45) | 4.1151989e-02 | 4.1075714e-02 | -0.2 % |
+    | | pcl(51,50) | 2.5995538e-02 | 2.6435262e-02 | +1.7 % |
+    | | pcl(52,23) | 7.1637584e-03 | 8.0051431e-03 | +12 % |
+    | `case_cloud_2nd` | irrdirect | 3.9084740e-09 | 1.2268060e-08 | x 3.14 |
+    | | cloud | 8.8153930e-07 | 1.3183160e-06 | +50 % |
+    | | diffuse | 1.4659320e-06 | 2.1926830e-06 | +50 % |
+    | | pcl(29,36) | 1.1128492e-01 | 1.2377754e-01 | +11 % |
+    | | pcl(31,28) | 1.0164575e-01 | 1.1356333e-01 | +12 % |
+    | | pcl(34,38) | 1.4267236e-01 | 1.5757380e-01 | +10 % |
+    | | pcl(36,30) | 2.1995874e-01 | 2.4195480e-01 | +10 % |
+    | | pcl(37,36) | 2.4120682e-01 | 1.6128626e-01 | -33 % (mast) |
+    | | pcl(38,35) | 1.8323134e-01 | 2.0184425e-01 | +10 % |
+
+    Why the numbers move: every case uses `reflsiz=9.99` at `dx=100`,
+    so the old kernel reflected from one 9.99 m square (99.8 m2) and
+    the new kernel reflects from a disc of 313.5 m2 (x 3.14). On the
+    flat cases with a far, high mast lamp the reflected irradiance
+    scales with that area (x 3.14). On the hill cases the lamps are
+    10 m high and the reflecting square sits right under them, so the
+    solid angle grows less than the area (x 2.08). The ground lamps
+    gain weight in the contribution map and the mast lamp loses it.
+    `los_steps` on `case_small` moves from 22 to 24 because the
+    `1/stoplim` stop criterion compares each step with the flux
+    accumulated so far, which is now larger. The 1-thread OpenMP run
+    stays byte-identical to the serial run on every case and the
+    4-thread run agrees within 1.2e-07.
 - The `.out` summary format changed from `E10.3E2` to `E14.7E2`
   (upstream `e63f3e0`), so `case_small/reference.json` and
   `case_hill/reference.json` were rebuilt on 2026-09-18 from the patched

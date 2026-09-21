@@ -121,6 +121,7 @@ c
       real dtheta                                                         ! Angle increment of the photometric function of the sources
       real dx,dy,dxp,dyp                                                  ! Width of the voxel (meter)
       integer boxx,boxy                                                   ! reflection window size (pixels)
+      real afrac                                                          ! fraction of the area of a ground cell inside the reflection disc
       real fdifa(181),fdifan(181)                                         ! Aerosol scattering functions (unnormalized and normalized)
       real extinc,scatte,anglea(181)                                      ! Aerosol cross sections (extinction and scattering), scattering angle (degree)
       real secdif                                                         ! Contribution of the scattering to the extinction
@@ -403,8 +404,12 @@ c second pass: store the pointings
       endif
       scal=19.
       scalo=scal
-      boxx=nint(reflsiz/dx)                                               ! Number of column to consider left/right of the source for the reflection.
-      boxy=nint(reflsiz/dy)                                               ! Number of column to consider up/down of the source for the reflection.
+c the box covers the disc of radius reflsiz around the source. Each
+c cell of the box is weighted by the fraction of its area inside the
+c disc (see discfrac), so the reflecting area is pi*reflsiz**2
+c whatever the cell size.
+      boxx=ceiling(reflsiz/dx)                                            ! Number of column to consider left/right of the source for the reflection.
+      boxy=ceiling(reflsiz/dy)                                            ! Number of column to consider up/down of the source for the reflection.
 c omemax: exclude calculations too close (<10m) this is a sustended angle of 1 deg.
 c the calculated flux is highly sensitive to that number for a very high
 c pixel resolution (a few 10th of meters). We assume anyway that somebody
@@ -998,8 +1003,11 @@ c
                     ry_sr=real(y_sr)*dy
                     irefl=0.
                     z_sr=altsol(x_sr,y_sr)
+                    call discfrac(rx_sr,ry_sr,rx_s,ry_s,dx,dy,
+     +              reflsiz,afrac)
                     if((x_sr.gt.nbx).or.(x_sr.lt.1).or.
-     +              (y_sr.gt.nby).or.(y_sr.lt.1)) then
+     +              (y_sr.gt.nby).or.(y_sr.lt.1).or.
+     +              (afrac.le.0.)) then
                         if (verbose.eq.2) then
                           print*,'Ground cell out of borders'
                         endif
@@ -1038,26 +1046,10 @@ c computation of the solid angle of the reflecting cell seen from the source
                             zn=dble(z_s)                                  ! Position in meters of the source (altitude).
                             epsilx=inclix(x_sr,y_sr)                      ! tilt along x of the ground reflectance
                             epsily=incliy(x_sr,y_sr)                      ! tilt along x of the ground reflectance
-                            if (dx.gt.reflsiz) then                       ! use a sub-grid surface when the reflectance radius is smaller than the cell size
-                              if ((x_sr.eq.x_s).and.(y_sr
-     +                        .eq.y_s)) then
-                                dxp=reflsiz
-                              else
-                                dxp=dx
-                              endif
-                            else
-                              dxp=dx
-                            endif
-                            if (dy.gt.reflsiz) then
-                              if ((x_sr.eq.x_s).and.(y_sr
-     +                        .eq.y_s)) then
-                                dyp=reflsiz
-                              else
-                                dyp=dy
-                              endif
-                            else
-                              dyp=dy
-                            endif
+c reflecting surface = part of the cell inside the disc of radius
+c reflsiz around the source: a square of the same area (afrac*dx*dy)
+                            dxp=dx*sqrt(afrac)
+                            dyp=dy*sqrt(afrac)
                             r1x=xc-dble(dxp)/2.-xn                        ! computation of the composante along x of the first vector.
                             r1y=yc+dble(dyp)/2.-yn                        ! computation of the composante along y of the first vector.
                             r1z=zc-tan(dble(epsilx))*
@@ -1359,6 +1351,7 @@ c parameter and cannot appear in a clause.
 !$omp& itotrd,itodif,isourc,irefl,irefl1,intind,haut,ouvang,nbang,
 !$omp& flrefl,flindi,pdifin,ds1,ds2,ds3,fldif2,pdifd1,volu,idif2,fdif2,
 !$omp& pdifd2,idif2p,fldif1,idif1,fldiff,idiff2,epsilx,epsily,dxp,dyp,
+!$omp& afrac,
 !$omp& xc,yc,zc,xn,yn,zn,r1x,r1y,r1z,r2x,r2y,r2z,r3x,r3y,r3z,r4x,r4y,
 !$omp& r4z)
                   do x_s=imin(stype),imax(stype)                          ! beginning of the loop over the column (longitude the) of the domain.
@@ -1499,8 +1492,11 @@ c etablissement of the conditions ands boucles
                                 ry_sr=real(y_sr)*dy
                                 irefl=0.
                                 z_sr=altsol(x_sr,y_sr)
+                                call discfrac(rx_sr,ry_sr,rx_s,ry_s,
+     +                          dx,dy,reflsiz,afrac)
                                 if((x_sr.gt.nbx).or.(x_sr.lt.1).or.
-     +                          (y_sr.gt.nby).or.(y_sr.lt.1)) then
+     +                          (y_sr.gt.nby).or.(y_sr.lt.1).or.
+     +                          (afrac.le.0.)) then
                                   if (verbose.eq.2) then
                                     print*,'Ground cell out of borders'
                                   endif
@@ -1539,26 +1535,10 @@ c computation of the solid angle of the reflecting cell seen from the source
                                         zn=dble(z_s)                      ! Position in meters of the source (altitude).
                                         epsilx=inclix(x_sr,y_sr)          ! tilt along x of the ground reflectance
                                         epsily=incliy(x_sr,y_sr)          ! tilt along x of the ground reflectance
-                                        if (dx.gt.reflsiz) then           ! use a sub-grid surface when the reflectance radius is smaller than the cell size
-                                          if ((x_sr.eq.x_s).and.(y_sr
-     +                                    .eq.y_s)) then
-                                            dxp=reflsiz
-                                          else
-                                            dxp=dx
-                                          endif
-                                        else
-                                          dxp=dx
-                                        endif
-                                        if (dy.gt.reflsiz) then
-                                          if ((x_sr.eq.x_s).and.(y_sr
-     +                                    .eq.y_s)) then
-                                            dyp=reflsiz
-                                          else
-                                            dyp=dy
-                                          endif
-                                        else
-                                          dyp=dy
-                                        endif
+c reflecting surface = part of the cell inside the disc of radius
+c reflsiz around the source: a square of the same area (afrac*dx*dy)
+                                        dxp=dx*sqrt(afrac)
+                                        dyp=dy*sqrt(afrac)
                                         r1x=xc-dble(dxp)/2.-xn            ! computation of the composante along x of the first vector.
                                         r1y=yc+dble(dyp)/2.-yn            ! computation of the composante along y of the first vector.
                                         r1z=zc-tan(dble(epsilx))*
@@ -2247,6 +2227,64 @@ c***********************************************************************
      +  ': need',need,' characters, limit',maxlen
         stop 1
       endif
+      return
+      end
+c***********************************************************************
+c     discfrac: fraction of the area of the ground cell centred on
+c     (xc,yc), of size dx by dy, that lies inside the disc of radius r
+c     centred on (xs,ys). Exact (analytic) result, so the sum over the
+c     cells of the reflection box is pi*r**2 for every cell size.
+c***********************************************************************
+      subroutine discfrac(xc,yc,xs,ys,dx,dy,r,frac)
+      implicit none
+      real xc,yc,xs,ys,dx,dy,r,frac
+      real*8 xa,xb,ya,yb,area,rr
+      real*8 dqarea
+      rr=dble(r)
+      xa=dble(xc)-dble(dx)/2.d0-dble(xs)
+      xb=dble(xc)+dble(dx)/2.d0-dble(xs)
+      ya=dble(yc)-dble(dy)/2.d0-dble(ys)
+      yb=dble(yc)+dble(dy)/2.d0-dble(ys)
+      area=dqarea(xb,yb,rr)-dqarea(xa,yb,rr)-dqarea(xb,ya,rr)
+     ++dqarea(xa,ya,rr)
+      frac=real(area/(dble(dx)*dble(dy)))
+      if (frac.lt.0.) frac=0.
+      if (frac.gt.1.) frac=1.
+      return
+      end
+c***********************************************************************
+c     dqarea: signed area of the intersection of the disc of radius r
+c     centred on the origin with the rectangle that has the origin and
+c     (x,y) as opposite corners.
+c***********************************************************************
+      real*8 function dqarea(x,y,r)
+      implicit none
+      real*8 x,y,r,w,h,x1,b,sgn,fa,fb
+      w=abs(x)
+      h=abs(y)
+      sgn=1.d0
+      if (x.lt.0.d0) sgn=-sgn
+      if (y.lt.0.d0) sgn=-sgn
+      if ((w.eq.0.d0).or.(h.eq.0.d0).or.(r.le.0.d0)) then
+        dqarea=0.d0
+        return
+      endif
+      if (w*w+h*h.le.r*r) then
+        dqarea=sgn*w*h
+        return
+      endif
+c the rectangle [0,w]x[0,h] crosses the circle. Along x the integrand
+c min(h,sqrt(r**2-x**2)) equals h up to x1 and the arc beyond it.
+      b=min(w,r)
+      if (h.ge.r) then
+        x1=0.d0
+      else
+        x1=sqrt(r*r-h*h)
+      endif
+      if (x1.gt.b) x1=b
+      fa=(x1*sqrt(max(r*r-x1*x1,0.d0))+r*r*asin(min(x1/r,1.d0)))/2.d0
+      fb=(b*sqrt(max(r*r-b*b,0.d0))+r*r*asin(min(b/r,1.d0)))/2.d0
+      dqarea=sgn*(h*x1+fb-fa)
       return
       end
 c***********************************************************************

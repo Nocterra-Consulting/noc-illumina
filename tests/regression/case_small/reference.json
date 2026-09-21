@@ -1,17 +1,17 @@
 {
-  "binary": "/home/egcharlton/git/noc-illumina/bin/illumina",
-  "created": "2026-09-18 18:36:39",
-  "git_commit": "ba80459",
-  "los_max_dist_m": 1433.2,
-  "los_steps": 22,
+  "binary": "/tmp/claude-1000/-home-egcharlton-git-artificial-light-modelling/592b282c-0ad3-4436-8c70-9f18bf28c898/scratchpad/wt-kernel/bin/illumina",
+  "created": "2026-09-22 01:24:23",
+  "git_commit": "1c7e7c8",
+  "los_max_dist_m": 1832.69,
+  "los_steps": 24,
   "make_case_args": [],
   "pcl_nonzero": {
-    "29,36": 0.0005502590211108327,
-    "31,28": 0.00038446407415904105,
-    "34,38": 0.0021928315982222557,
-    "36,30": 0.0012836505193263292,
-    "37,36": 0.9902015924453735,
-    "38,35": 0.005387129727751017
+    "29,36": 0.0010481671197339892,
+    "31,28": 0.0007438616012223065,
+    "34,38": 0.003906686324626207,
+    "36,30": 0.0023565716110169888,
+    "37,36": 0.9826968908309937,
+    "38,35": 0.009247859008610249
   },
   "pcl_shape": [
     64,
@@ -19,11 +19,11 @@
   ],
   "summary": {
     "cloud": 0.0,
-    "diffuse": 9.029627e-05,
+    "diffuse": 9.098759e-05,
     "direct": 0.02850366,
     "irdirect": 0.0001704847,
-    "irrdirect": 2.144338e-08,
+    "irrdirect": 6.730727e-08,
     "rdirect": 0.0
   },
-  "wall_time_s": 0.466
+  "wall_time_s": 0.536
 }
