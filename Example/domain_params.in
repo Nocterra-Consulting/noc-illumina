@@ -7,3 +7,4 @@ nb_pixels: 27
 nb_layers: 3
 scale_min: 1000
 buffer: 10
+# max_half_width: 255   # optional; largest layer half-width in cells, buffer included (default 255 = 511 cells)
