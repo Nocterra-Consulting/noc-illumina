@@ -134,6 +134,11 @@ class MultiScaleData:
 
     def set_overlap(self, value=0):
         nb_core = self._attrs["nb_core"]
+        if nb_core < 0:
+            raise ValueError(
+                "nb_core must be zero or positive, got %d. A negative value "
+                "would select the wrong cells." % nb_core
+            )
         for i in range(1, len(self)):
             ny, nx = self[i].shape
             obs_x = self._attrs["layers"][i]["observer_size_x"]
@@ -146,6 +151,12 @@ class MultiScaleData:
     def set_buffer(self, value=0):
         for i in range(len(self)):
             buff = self._attrs["layers"][i]["buffer"]
+            if buff < 0:
+                raise ValueError(
+                    "Layer %d has a negative buffer of %d cells. A negative "
+                    "buffer would overwrite the whole array instead of its "
+                    "edge. Regenerate domain.ini." % (i, buff)
+                )
             ny, nx = self[i].shape
             self[i][:buff] = value
             self[i][ny - buff :] = value

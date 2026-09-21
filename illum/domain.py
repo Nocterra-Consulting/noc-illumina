@@ -94,13 +94,32 @@ def domain():
     r = int((domain["nb_pixels"] / float(domain.pop("scale_factor"))) / 2)
     scale = (R + 0.5) / (r + 0.5)
 
+    # Largest half-width (in cells) of one layer, buffer included. The
+    # historical value of 255 keeps a layer at 511 cells or fewer, the
+    # size the fixed-array kernel (parameter width=512) could hold. The
+    # current kernel allocates from the file header, so a larger value
+    # only costs memory and time.
+    max_half_width = int(domain.pop("max_half_width", 255))
+    if max_half_width < 1:
+        raise ValueError(
+            "max_half_width must be a positive number of cells, got %d"
+            % max_half_width
+        )
+    if R > max_half_width:
+        raise ValueError(
+            "nb_pixels %d gives a domain half-width of %d cells, above the "
+            "max_half_width of %d cells. Lower nb_pixels to %d or less, or "
+            "raise max_half_width in domain_params.in."
+            % (domain["nb_pixels"], R, max_half_width, 2 * max_half_width + 1)
+        )
+
     domain["nb_pixels"] = R
     domain["nb_core"] = r
     domain["extents"] = list()
 
     for i in range(domain["nb_layers"]):
         psize = domain["scale_min"] * scale**i
-        buff = min(255 - R, domain["buffer"] * 1e3 // psize)
+        buff = max(0, min(max_half_width - R, domain["buffer"] * 1e3 // psize))
 
         print("Layer", i)
         print("Pixel size:", eng_format(psize, "m"))
