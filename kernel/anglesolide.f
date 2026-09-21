@@ -41,19 +41,19 @@ c
       r4=dsqrt(r4x**2.+r4y**2.+r4z**2.)                                   ! Calcul de la norme du vecteur #4.
       if (r1.eq.0.) then
          print*,'ERREUR r1=0'
-         stop
+         stop 1
       endif
       if (r2.eq.0.) then
          print*,'ERREUR r2=0'
-         stop
+         stop 1
       endif
       if (r3.eq.0.) then
          print*,'ERREUR r3=0'
-         stop
+         stop 1
       endif
       if (r4.eq.0.) then
          print*,'ERREUR r1=0'
-         stop
+         stop 1
       endif
 
       arg=(r1x*r2x+r1y*r2y+r1z*r2z)/(r1*r2)

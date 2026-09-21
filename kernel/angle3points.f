@@ -43,12 +43,12 @@ c
       if ((xv.eq.0.).and.(yv.eq.0.).and.(zv.eq.0.)) then
          print*,'ERREUR vecteur sortie nul'
          print*,x1,y1,z1,x2,y2,z2,x3,y3,z3
-         stop
+         stop 1
       endif
       if ((xu.eq.0.).and.(yu.eq.0.).and.(zu.eq.0.)) then
          print*,'ERREUR vecteur d entree nul'
          print*,x1,y1,z1,x2,y2,z2,x3,y3,z3
-         stop
+         stop 1
       endif
       argume=(xu*xv+yu*yv+zu*zv)/(sqrt(xu**2.+yu**2.+zu**2.)*
      a        sqrt(xv**2.+yv**2.+zv**2.))
@@ -61,7 +61,7 @@ c
       endif 
       if (an3pts.lt.0.) then
          print*,'ERREUR an3pts < 0'
-         stop
+         stop 1
       endif
       return
       end

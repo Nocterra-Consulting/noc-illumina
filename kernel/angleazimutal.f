@@ -50,7 +50,7 @@ c
         endif
         if ((angazi.lt.0.).or.(angazi.gt.2.*pi)) then
           print*,'ERREUR angazi=',angazi,x1,y2,x2,y2
-          stop
+          stop 1
         endif
 c        if ((x1.eq.x2).and.(y1.eq.y2)) then
 c          print*,'ERREUR cant compute angle between identical points!'

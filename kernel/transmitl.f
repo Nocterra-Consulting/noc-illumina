@@ -58,7 +58,7 @@ c
          endif
          if (transl.gt.1.) then 
             print*,'ERREUR avec transa',transl,z_i,z_f,angz
-            stop
+            stop 1
          endif
       return
       end
