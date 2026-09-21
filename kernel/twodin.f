@@ -4,7 +4,7 @@ c nbx,nby are inputs: the domain size taken from the topography file
 c (see twodsize). The file header must have the same size.
        integer nbx,nby,i,j,nbxf,nbyf
        real bindata(nbx,nby)
-       character*72 filename
+       character*(*) filename
        open(unit=1,form='unformatted',file=filename,action='read')
          read(1) nbxf,nbyf
          if ((nbxf.ne.nbx).or.(nbyf.ne.nby)) then
@@ -26,7 +26,7 @@ c-----------------------------------------------------------------------
        subroutine twodsize(filename,nbx,nby)
 c read only the nbx,nby header of an unformatted binary file
        integer nbx,nby
-       character*72 filename
+       character*(*) filename
        open(unit=1,form='unformatted',file=filename,action='read')
          read(1) nbx,nby
        close(unit=1)

@@ -99,11 +99,11 @@ c
       integer ios,lkind                                                   ! I/O status, kind of an angles file line
       real elev1,azim1                                                    ! one pointing read from the angles file
       real, allocatable :: elevs(:),azims(:)                              ! pointings: elevation and geographic azimuth (deg)
-      character*72 mnaf                                                   ! Terrain elevation file
-      character*72 diffil                                                 ! Aerosol file
+      character(maxnam) mnaf                                              ! Terrain elevation file
+      character(maxnam) diffil                                            ! Aerosol file
       character(maxnam) pclf,pclgp                                          ! Files containing contribution and sensitivity maps
       character(maxnam) pclimg,pcwimg
-      character*72 basenm                                                 ! Base name of files
+      character(maxnam) basenm                                            ! Base name of files
       integer lenbase                                                     ! Length of the Base name of the experiment
       real lambda,pressi                                                  ! Wavelength (nanometer), atmospheric pressure (kPa)
       real, allocatable :: drefle(:,:)                                    ! mean free path to the ground (meter).
@@ -116,7 +116,7 @@ c
       real, allocatable :: altsol(:,:)                                           ! Ground elevation (meter)
       real srefl                                                          ! Ground reflectance
       integer stype                                                       ! Source type or zone index
-      character*72 pafile,lufile,alfile,ohfile,odfile,offile              ! Files related to light sources and obstacles (photometric function of the sources (sr-1), flux (W), height (m), obstacles c                                                               ! height (m), obstacle distance (m), obstacle filling factor (0-1).
+      character(maxnam) pafile,lufile,alfile,ohfile,odfile,offile         ! Files related to light sources and obstacles (photometric function of the sources (sr-1), flux (W), height (m), obstacles c                                                               ! height (m), obstacle distance (m), obstacle filling factor (0-1).
       real, allocatable :: lamplu(:,:,:)                                     ! Source fluxes
       real, allocatable :: lampal(:,:)                                           ! Height of the light sources relative to the ground (meter)
       real pval(181,nzon),pvalto,pvalno(181,nzon)                         ! Values of the angular photometry functions (unnormalized, integral, normalized)
@@ -267,9 +267,9 @@ c                                                                         ! a li
       real Fo                                                             ! flux correction factor for obstacles
       real thetali                                                        ! limit angle for the obstacles blocking of viirs
       integer, allocatable :: viirs(:,:)                                         ! viirs flag 1=yes 0=no
-      character*72 vifile                                                 ! name of the viirs flag file
+      character(maxnam) vifile                                            ! name of the viirs flag file
       real dh0,dhmax                                                      ! horizontal distance along the line of sight and maximum distance before beeing blocked by topography
-      character*72 layfile                                                ! filename of the optical properties of the particle layer
+      character(maxnam) layfile                                           ! filename of the optical properties of the particle layer
       real layaod                                                         ! 500 nm aod of the particle layer
       real layalp                                                         ! spectral exponent of the aod for the particle layer
       real hlay                                                           ! exponential vertical scale height of the particle layer
@@ -470,7 +470,12 @@ c computing the actual AOD at the wavelength lambda
       taua=taua*(lambda/500.)**(-1.*alpha)
       layaod=layaod*(lambda/500.)**(-1.*layalp)
 c  determine the Length of basenm
-      lenbase=index(basenm,' ')-1
+      lenbase=len_trim(basenm)
+      if (lenbase.ge.maxnam) then
+        print*,'Error: base name longer than',maxnam-1,' characters'
+        stop 1
+      endif
+      call chknam('mnaf',lenbase+12,maxnam)
       mnaf=basenm(1:lenbase)//'_topogra.bin'                              ! determine the names of input and output files
       if ((ntype.lt.1).or.(ntype.gt.nzon)) then
         print*,'Error: number of source types must be between 1 and',
@@ -616,9 +621,13 @@ c computation of the tilt of the pixels along x and along y
         enddo                                                             ! end of the loop over the column (longitude) of the domain
 c reading of the values of P(theta), height, luminosities and positions
 c of the sources, obstacle height and distance
+        call chknam('ohfile',lenbase+10,maxnam)
         ohfile=basenm(1:lenbase)//'_obsth.bin'
+        call chknam('odfile',lenbase+10,maxnam)
         odfile=basenm(1:lenbase)//'_obstd.bin'
+        call chknam('alfile',lenbase+10,maxnam)
         alfile=basenm(1:lenbase)//'_altlp.bin'                            ! setting the file name of height of the sources lumineuse.
+        call chknam('offile',lenbase+10,maxnam)
         offile=basenm(1:lenbase)//'_obstf.bin'
         vifile='origin.bin'
         dtheta=.017453293                                                 ! one degree
@@ -684,7 +693,9 @@ c Some preliminary tasks
           jmax(stype)=1
           pvalto=0.
           write(lampno, '(I3.3)' ) stype                                  ! support of nzon different sources (3 digits)
+          call chknam('pafile',lenbase+14,maxnam)
           pafile=basenm(1:lenbase)//'_fctem_'//lampno//'.dat'             ! setting the file name of angular photometry.
+          call chknam('lufile',lenbase+14,maxnam)
           lufile=basenm(1:lenbase)//'_lumlp_'//lampno//'.bin'             ! setting the file name of the luminosite of the cases.
 c reading photometry files
           open(UNIT=1, FILE=pafile,status='OLD')                          ! opening file pa#.dat, angular photometry.

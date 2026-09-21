@@ -61,7 +61,10 @@ All arguments are copied as is, so a path with `/`, a space or a
 comma works. The kernel prints the resolved file names and the number
 of pointings at start-up. A file name that the kernel builds is at most
 512 characters (`maxnam`); a longer name stops the run with a message
-that gives the variable and the length needed.
+that gives the variable and the length needed. The base name (line 2 of
+the parameter file) and every input name derived from it (`_topogra`,
+`_obsth`, `_obstd`, `_altlp`, `_obstf`, `_fctem_NNN`, `_lumlp_NNN`) share
+that limit; the former 72-character limit on these names is gone (#73).
 
 The kernel loads the domain once and loops over the pointings. Output
 files:
