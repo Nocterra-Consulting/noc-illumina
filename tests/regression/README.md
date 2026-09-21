@@ -33,9 +33,9 @@ The check compares:
 
 ## Kernel command line
 
-The kernel accepts three optional positional arguments:
+The kernel accepts four optional positional arguments:
 
-    illumina [PARFILE [OUTFILE [ANGLES_FILE]]]
+    illumina [PARFILE [OUTFILE [ANGLES_FILE [maps|nomaps]]]]
 
 - `PARFILE`: the parameter file (default `illumina.in`).
 - `OUTFILE`: the output file name (default `<basenm>.out`, where
@@ -49,8 +49,15 @@ The kernel accepts three optional positional arguments:
   with a message when the file is missing, has no pointing, or has a
   line that cannot be parsed. Without this argument the single pointing
   of the parameter file is used.
+- `maps` or `nomaps`: `maps` (the default when the argument is absent)
+  writes the per-pointing contribution map `<root>_pcl.bin`; `nomaps`
+  skips that file (3 MB per pointing) and writes every other output
+  (`.out`, `_result.txt`, `_results.txt`). Any other value stops the
+  run with a message. The regression harness runs with the default, so
+  the references hold the maps; `run_angles.py` checks that `nomaps`
+  gives the same `_result.txt` files and no `_pcl.bin`.
 
-All three arguments are copied as is, so a path with `/`, a space or a
+All arguments are copied as is, so a path with `/`, a space or a
 comma works. The kernel prints the resolved file names and the number
 of pointings at start-up. A file name that the kernel builds is at most
 512 characters (`maxnam`); a longer name stops the run with a message
@@ -130,7 +137,10 @@ The exit status is 0 on PASS and 1 on FAIL.
    `reference.json`,
 5. asserts that the combined `synth_results.txt` equals the three
    single `_result.txt` files joined with one blank line,
-6. reports the wall time of the three single runs and of the looped run.
+6. reports the wall time of the three single runs and of the looped run,
+7. runs the looped run once more with the fourth argument `nomaps` and
+   asserts that every `_result.txt` and the combined `synth_results.txt`
+   are byte-identical to the looped run and that no `_pcl.bin` exists.
 
 The script accepts `--binary`, `--case`, `--rtol`, `--atol` and
 `--timeout` like `run_regression.py`. Use `--keep` to keep the

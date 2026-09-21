@@ -85,6 +85,8 @@ c
       integer lenout                                                      ! length of the output file name
       real azimgeo                                                        ! geographic viewing azimuth as read from the parameter file (deg)
       character(maxnam) arg3                                              ! third CLI argument: angles list file
+      character(maxnam) arg4                                              ! fourth CLI argument: 'maps' or 'nomaps'
+      integer wrmaps                                                      ! 1 = write the per-pointing contribution map (_pcl.bin), 0 = skip it
       character(maxnam) anglesfile                                        ! path of the angles list file (optional argument 3)
       character(maxnam) outroot                                           ! output name without the trailing '.out'
       character(maxnam) outfile                                           ! .out file of the current pointing
@@ -404,6 +406,23 @@ c second pass: store the pointings
           stop 1
         endif
       enddo
+c NEW CHANGE HERE: optional fourth argument 'maps' (default, write the
+c per-pointing contribution map <root>_pcl.bin) or 'nomaps' (skip it;
+c every other output is written).
+      wrmaps=1
+      if (iargc().ge.4) then
+        call getarg(4,arg4)
+        arg4=adjustl(arg4)
+        if (arg4.eq.'nomaps') then
+          wrmaps=0
+        elseif (arg4.eq.'maps') then
+          wrmaps=1
+        else
+          print*,'Error: argument 4 must be maps or nomaps, got ',
+     +    trim(arg4)
+          stop 1
+        endif
+      endif
       dfov=(dfov*pi/180.)/2.
       siz=2500.
       if (ssswit.eq.0) then
@@ -507,6 +526,11 @@ c root of the output names = output file name without a trailing '.out'
         print*,'Angles file: ',trim(anglesfile)
       endif
       print*,'Number of pointings:',npts
+      if (wrmaps.eq.1) then
+        print*,'Contribution maps (_pcl.bin): written'
+      else
+        print*,'Contribution maps (_pcl.bin): not written (nomaps)'
+      endif
       print*,'Combined result file: ',trim(allres)
 c combined result record, one block per pointing, overwritten on re-run
       open(unit=4,file=allres,status='unknown')
@@ -836,7 +860,7 @@ c opening output file
         endif
         write(2,*) 'latitu center:',latitu
 c Initialisation of the per-pointing accumulators, arrays and variables
-        prmaps=1
+        prmaps=wrmaps
         iun=0
         ideux=1
         icloud=0.
