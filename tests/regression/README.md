@@ -72,6 +72,19 @@ files:
   pointing, blocks separated by a blank line. The file is overwritten
   on every run.
 
+## Near-field exclusion radius
+
+The kernel drops every source-voxel pair closer than an exclusion
+radius (10 m by default, the historical value hard-wired in `omemax`).
+An optional 25th line of the parameter file sets that radius in metres;
+a file without the line keeps 10 m and gives bit-identical results.
+When the cell size is at most twice the exclusion radius the kernel
+prints a `WARNING` line to stdout and to the `.out` header: most of the
+near-field signal is then discarded, and cells smaller than the
+exclusion radius are outside the valid range of the model. A case built
+with `make_case.py --dx 5` triggers the warning; the four regression
+cases (100 m cells) do not.
+
 ## Run the check
 
     make test

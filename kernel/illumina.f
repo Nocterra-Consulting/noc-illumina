@@ -238,6 +238,7 @@ c                                                                         ! a li
       integer n2nd                                                        ! desired number of voxel in the calculation of the 2nd scattering
       integer step                                                        ! skiping 2nd scat on 1 dim
       real omemax                                                         ! max solid angle allowed
+      real exclrad                                                        ! near-field exclusion radius (m): source-voxel pairs closer than this are dropped
       real tcloud                                                         ! low cloud transmission
       real rx_sp,ry_sp                                                    ! position of a low cloud pixel
       real, allocatable :: flcld(:,:)                                            ! flux crossing a low cloud
@@ -328,7 +329,15 @@ c NEW CHANGE HERE: allow a custom named input file to be given as CLI arguement
         read(1,*) reflsiz
         read(1,*) cloudt, cloudbase, cloudfrac
         read(1,*)
+c optional trailing line: near-field exclusion radius (m). A file
+c without that line keeps the historical 10 m.
+        read(1,*,iostat=ios) exclrad
+        if (ios.ne.0) exclrad=10.
       close(1)
+      if (exclrad.le.0.) then
+        print*,'Error: exclusion radius must be positive, got',exclrad
+        stop 1
+      endif
 c NEW CHANGE HERE: optional third argument = angles list file. One
 c pointing per line 'elevation_deg azimuth_deg' (geographic azimuth,
 c the convention of the parameter file). Blank lines and lines that
@@ -410,19 +419,29 @@ c disc (see discfrac), so the reflecting area is pi*reflsiz**2
 c whatever the cell size.
       boxx=ceiling(reflsiz/dx)                                            ! Number of column to consider left/right of the source for the reflection.
       boxy=ceiling(reflsiz/dy)                                            ! Number of column to consider up/down of the source for the reflection.
-c omemax: exclude calculations too close (<10m) this is a sustended angle of 1 deg.
+c omemax: exclude calculations too close (<exclrad, 10 m by default)
+c this is a sustended angle of 1 deg.
 c the calculated flux is highly sensitive to that number for a very high
 c pixel resolution (a few 10th of meters). We assume anyway that somebody
 c observing the sky will never lies closer than that distance to a
 c light fixture. This number is however somehow subjective and that means
 c that the value of sky brightness near sources will be affected by this
 c choice
-      omemax=1./((10.)**2.)
+      omemax=1./(exclrad**2.)
       if (verbose.gt.0) then
         print*,'2nd order scattering grid = ',siz,'m'
         print*,'2nd order scattering radius=',effdif,'m'
         print*,'Pixel size = ',dx,' x ',dy
         print*,'Maximum radius for reflection = ',reflsiz
+        print*,'Near-field exclusion radius = ',exclrad,'m'
+      endif
+      if (dx.le.2.*exclrad) then
+        print*,'WARNING: cell size',dx,' m is at most twice the',
+     +  ' exclusion radius',exclrad,' m. Every source-voxel pair',
+     +  ' closer than the exclusion radius is dropped, so a large',
+     +  ' fraction of the near-field signal is discarded. Cells',
+     +  ' smaller than the exclusion radius are outside the valid',
+     +  ' range of the model.'
       endif
 c computing the actual AOD at the wavelength lambda
       if (verbose.ge.1) print*,'500nm AOD=',taua,'500nm angstrom coeff.=
@@ -806,6 +825,15 @@ c opening output file
         write(2,*) 'Width of the domain [NS](m):',largx,'#cases:',nbx
         write(2,*) 'Width of the domain [EO](m):',largy,'#cases:',nby
         write(2,*) 'Size of a cell (m):',dx,' X ',dy
+        write(2,*) 'Near-field exclusion radius (m):',exclrad
+        if (dx.le.2.*exclrad) then
+          write(2,*) 'WARNING: cell size',dx,' m is at most twice the',
+     +    ' exclusion radius',exclrad,' m. Every source-voxel pair',
+     +    ' closer than the exclusion radius is dropped, so a large',
+     +    ' fraction of the near-field signal is discarded. Cells',
+     +    ' smaller than the exclusion radius are outside the valid',
+     +    ' range of the model.'
+        endif
         write(2,*) 'latitu center:',latitu
 c Initialisation of the per-pointing accumulators, arrays and variables
         prmaps=1
