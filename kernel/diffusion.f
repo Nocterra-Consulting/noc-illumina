@@ -75,27 +75,27 @@ c----------------------------------------
                                                                           ! 1-transm et 1-transl are small
       if (prob_a.gt.1.) then
          print*,'prob_a>1.'
-         stop
+         stop 1
       endif
       if (prob_a.lt.0.) then
          print*,'prob_a<0..'
-         stop
+         stop 1
       endif
       if (prob_m.gt.1.) then
          print*,'prob_m>1.'
-         stop
+         stop 1
       endif
       if (prob_m.lt.0.) then
          print*,'prob_m`¸^<0..'
-         stop
+         stop 1
       endif
       if (prob_l.gt.1.) then
          print*,'prob_l>1.'
-         stop
+         stop 1
       endif
       if (prob_l.lt.0.) then
          print*,'prob_l`¸^<0..'
-         stop
+         stop 1
       endif
       if (pdif.gt.1.) then
          pdif=1.

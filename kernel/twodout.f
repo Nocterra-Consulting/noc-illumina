@@ -1,8 +1,8 @@
        subroutine twodout(nbx,nby,filename,bindata)
-c write double precision array in binary
+c write a real array to an unformatted binary file
        integer nbx,nby,i,j
-       real*8 bindata(512,512)
-       character*72 filename
+       real*8 bindata(nbx,nby)
+       character*(*) filename
        open(unit=1,form='unformatted',file=filename,action='write')
          write(1) nbx,nby
          do j=nby,1,-1

@@ -1,20 +1,20 @@
        subroutine twodin(nbx,nby,filename,dbindata)
-       integer width                                                      ! Matrix dimension in Length/width and height
-       parameter (width=512)
-c read double precision array in binary
-       integer nbx,nby,i,j
-       real bindata(width,width)
-       real*8 dbindata(width,width)
-
-       character*72 filename
+c read a double precision array from an unformatted binary file
+c nbx,nby are inputs: the domain size taken from the topography file
+c (see twodsize). The file header must have the same size.
+c The file stores single precision, so each value is promoted on read.
+       integer nbx,nby,i,j,nbxf,nbyf
+       real bindata(nbx,nby)
+       real*8 dbindata(nbx,nby)
+       character*(*) filename
        open(unit=1,form='unformatted',file=filename,action='read')
-         read(1) nbx,nby
-         if ((nbx.gt.width).or.(nby.gt.width)) then
-          print*,'You try to use a domain larger than the maximum'
-          print*,'allowed. Please restrict it to no more that 512 x 512'
-          print*,'Your domain size is: ',nbx,'x',nby
+         read(1) nbxf,nbyf
+         if ((nbxf.ne.nbx).or.(nbyf.ne.nby)) then
+          print*,'Domain size mismatch in file: ',filename
+          print*,'File size is: ',nbxf,'x',nbyf
+          print*,'Topography size is: ',nbx,'x',nby
           print*,'Computation aborted'
-          stop
+          stop 1
          endif
          do j=nby,1,-1
             do i=1,nbx
@@ -23,5 +23,21 @@ c read double precision array in binary
             enddo
          enddo
        close(unit=1)
+       return
+       end
+c-----------------------------------------------------------------------
+       subroutine twodsize(filename,nbx,nby)
+c read only the nbx,nby header of an unformatted binary file
+       integer nbx,nby
+       character*(*) filename
+       open(unit=1,form='unformatted',file=filename,action='read')
+         read(1) nbx,nby
+       close(unit=1)
+       if ((nbx.lt.1).or.(nby.lt.1)) then
+         print*,'Invalid domain size in file: ',filename
+         print*,'Size read: ',nbx,'x',nby
+         print*,'Computation aborted'
+         stop 1
+       endif
        return
        end

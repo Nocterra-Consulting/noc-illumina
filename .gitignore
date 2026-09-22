@@ -1,3 +1,14 @@
 bin/
 __pycache__/
 illum.egg-info
+# build artefacts (Makefile)
+build/
+bin/illumina
+bin/illumina_debug
+bin/illumina_omp
+bin/continue_illumina
+# generated regression inputs/outputs (keep reference.json)
+tests/regression/case_*/*
+!tests/regression/case_*/reference.json
+# generated imaging scenario (keep make_scenario.py, run_hemisphere.sh, README.md)
+tests/imaging/scenario/

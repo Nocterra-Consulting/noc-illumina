@@ -62,7 +62,7 @@ c
          endif
          if (transa.gt.1.) then 
             print*,'ERREUR avec transa',transa,z_i,z_f,angz
-            stop
+            stop 1
          endif
       return
       end

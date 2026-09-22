@@ -69,43 +69,66 @@ c=======================================================================
 c     Variables declaration
 c=======================================================================
 c
-      integer width,nzon                                                  ! Matrix dimension in Length/width and height
-      parameter (width=512,nzon=256)
+      integer nzon                                                        ! Maximum number of source types
+      parameter (nzon=256)
       integer iun,ideux
       real*8 pi,pix4
       real*8 zero,un                                                        ! value of 0. and 1.
       integer verbose                                                     ! verbose = 1 to have more print out, 0 for silent
       parameter (pi=3.141592654)
       parameter (pix4=4.*pi)
-      character*72 mnaf                                                   ! Terrain elevation file
-      character*72 diffil                                                 ! Aerosol file
-      character*72 outfile                                                ! Results file
-      character*72 pclf,pclgp                                             ! Files containing contribution and sensitivity maps
-      character*72 pclimg,pcwimg
-      character*72 basenm                                                 ! Base name of files
+      integer maxnam                                                      ! maximum length of a file name built by the kernel
+      parameter (maxnam=512)
+      character(maxnam) arg1,arg2                                         ! NEW CHANGE: CLI added to allow for custom in/outs
+      character(maxnam) inputfile,outputfile                                    ! NEW CHANGE: variable for inputfile and outputfiles
+      character(maxnam) resfile                                           ! machine-readable result record (<root>_result.txt)
+      integer lenout                                                      ! length of the output file name
+      real*8 azimgeo                                                        ! geographic viewing azimuth as read from the parameter file (deg)
+      character(maxnam) arg3                                              ! third CLI argument: angles list file
+      character(maxnam) arg4                                              ! fourth CLI argument: 'maps' or 'nomaps'
+      integer wrmaps                                                      ! 1 = write the per-pointing contribution map (_pcl.bin), 0 = skip it
+      character(maxnam) anglesfile                                        ! path of the angles list file (optional argument 3)
+      character(maxnam) outroot                                           ! output name without the trailing '.out'
+      character(maxnam) outfile                                           ! .out file of the current pointing
+      character(maxnam) allres                                            ! combined result record (<root>_results.txt)
+      character(200) aline                                                ! one line of the angles list file
+      character(32) etag,atag                                             ! angle tags used in the output file names
+      integer lenroot,letag,latag                                         ! string lengths
+      integer lentag                                                      ! length of the root with the angle tags
+      integer npts,ipt                                                    ! number of pointings, pointing counter
+      integer ios,lkind                                                   ! I/O status, kind of an angles file line
+      real*8 elev1,azim1                                                    ! one pointing read from the angles file
+      real*8, allocatable :: elevs(:),azims(:)                              ! pointings: elevation and geographic azimuth (deg)
+      character(maxnam) mnaf                                              ! Terrain elevation file
+      character(maxnam) diffil                                            ! Aerosol file
+      character(maxnam) pclf,pclgp                                          ! Files containing contribution and sensitivity maps
+      character(maxnam) pclimg,pcwimg
+      character(maxnam) basenm                                            ! Base name of files
       integer lenbase                                                     ! Length of the Base name of the experiment
-      real*8 lambda,pressi,drefle(width,width)                              ! Wavelength (nanometer), atmospheric pressure (kPa), mean free path to the ground (meter).
+      real*8 lambda,pressi                                                  ! Wavelength (nanometer), atmospheric pressure (kPa)
+      real*8, allocatable :: drefle(:,:)                                    ! mean free path to the ground (meter).
       real*8 reflsiz                                                        ! Size of the reflecting surface
       integer ntype                                                       ! Number of light source types or zones considered
       real*8 largx                                                          ! Width (x axis) of the modeling domain (meter)
       real*8 largy                                                          ! Length (y axis) of the modeling domain (meter)
       integer nbx,nby                                                     ! Number of pixels in the modeling domain
-      real*8 val2d(width,width)                                             ! Temporary input array 2d
-      real*8 altsol(width,width)                                            ! Ground elevation (meter)
+      real*8, allocatable :: val2d(:,:)                                            ! Temporary input array 2d
+      real*8, allocatable :: altsol(:,:)                                           ! Ground elevation (meter)
       real*8 srefl                                                          ! Ground reflectance
       integer stype                                                       ! Source type or zone index
-      character*72 pafile,lufile,alfile,ohfile,odfile,offile              ! Files related to light sources and obstacles (photometric function of the sources (sr-1), flux (W), height (m), obstacles c                                                               ! height (m), obstacle distance (m), obstacle filling factor (0-1).
-      real*8 lamplu(width,width,nzon)                                       ! Source fluxes
-      real*8 lampal(width,width)                                            ! Height of the light sources relative to the ground (meter)
+      character(maxnam) pafile,lufile,alfile,ohfile,odfile,offile         ! Files related to light sources and obstacles (photometric function of the sources (sr-1), flux (W), height (m), obstacles c                                                               ! height (m), obstacle distance (m), obstacle filling factor (0-1).
+      real*8, allocatable :: lamplu(:,:,:)                                     ! Source fluxes
+      real*8, allocatable :: lampal(:,:)                                           ! Height of the light sources relative to the ground (meter)
       real*8 pval(181,nzon),pvalto,pvalno(181,nzon)                         ! Values of the angular photometry functions (unnormalized, integral, normalized)
       real*8 dtheta                                                         ! Angle increment of the photometric function of the sources
       real*8 dx,dy,dxp,dyp                                                  ! Width of the voxel (meter)
       integer boxx,boxy                                                   ! reflection window size (pixels)
+      real*8 afrac                                                          ! fraction of the area of a ground cell inside the reflection disc
       real*8 fdifa(181),fdifan(181)                                         ! Aerosol scattering functions (unnormalized and normalized)
       real*8 extinc,scatte,anglea(181)                                      ! Aerosol cross sections (extinction and scattering), scattering angle (degree)
       real*8 secdif                                                         ! Contribution of the scattering to the extinction
-      real*8 inclix(width,width)                                            ! tilt of the ground pixel along x (radian)
-      real*8 incliy(width,width)                                            ! tilt of the ground pixel along y (radian)
+      real*8, allocatable :: inclix(:,:)                                           ! tilt of the ground pixel along x (radian)
+      real*8, allocatable :: incliy(:,:)                                           ! tilt of the ground pixel along y (radian)
       integer x_obs,y_obs                                                 ! Position of the observer (INTEGER)
       real*8 rx_obs,ry_obs
       real*8 z_o                                                            ! observer height relative to the ground (meter)
@@ -169,16 +192,18 @@ c                                                                         ! when
       real*8 angvis,azim                                                    ! viewing angles of the sensor.
 c                                                                         ! Useful for the calculation of the lambertian reflectance.
       real*8 nbang                                                          ! for the averaging of the photometric function
-      real*8 obsH(width,width),angmin                                       ! averaged height of the sub-grid obstacles, minimum angle under wich
+      real*8, allocatable :: obsH(:,:)                                      ! averaged height of the sub-grid obstacles
+      real*8 angmin                                                         ! minimum angle under wich
 c                                                                         ! a light ray cannot propagate because it is blocked by a sub-grid obstable
-      real*8 ofill(width,width)                                             ! fill factor giving the probability to hit an obstacle when pointing in its direction real*8 0-1
+      real*8, allocatable :: ofill(:,:)                                            ! fill factor giving the probability to hit an obstacle when pointing in its direction real 0-1
       integer naz,na
-      real*8 ITT(width,width,nzon)                                          ! total intensity per type of lamp
-      real*8 ITC(width,width)                                               ! total intensity per line of sight voxel
-      real*8 FTC(width,width)                                               ! fraction of the total flux at the sensor level
-      real*8 FCA(width,width)                                               ! sensor flux array
-      real*8 lpluto(width,width)                                            ! total luminosity of the ground cell for all lamps
+      real*8, allocatable :: ITT(:,:,:)                                        ! total intensity per type of lamp
+      real*8, allocatable :: ITC(:,:)                                              ! total intensity per line of sight voxel
+      real*8, allocatable :: FTC(:,:)                                              ! fraction of the total flux at the sensor level
+      real*8, allocatable :: FCA(:,:)                                              ! sensor flux array
+      real*8, allocatable :: lpluto(:,:)                                           ! total luminosity of the ground cell for all lamps
       character*3 lampno                                                  ! lamp number string
+      integer imin(nzon),imax(nzon),jmin(nzon),jmax(nzon)                 ! x and y limits containing a type of lamp
       real*8 angazi                                                         ! azimuth angle between two points in rad, max dist for the horizon determination
       real*8 latitu                                                         ! approximate latitude of the domain center
       integer prmaps                                                      ! flag to enable the tracking of contribution and sensitivity maps
@@ -197,7 +222,6 @@ c                                                                         ! a li
       real*8 azencl                                                         ! zenith angle from cloud to observer
       real*8 icloud                                                         ! cloud reflected intensity
       real*8 fcloud                                                         ! flux reaching the intrument from the cloud voxel
-      real*8 fccld                                                          ! correction for the FOV to the flux reaching the intrument from the cloud voxel
       real*8 fctcld                                                         ! total flux from cloud at the sensor level
       real*8 totlu(nzon)                                                    ! total flux of a source type
       real*8 stoplim                                                        ! Stop computation when the new voxel contribution is less than 1/stoplim of the cumulated flux
@@ -216,17 +240,23 @@ c                                                                         ! a li
       integer n2nd                                                        ! desired number of voxel in the calculation of the 2nd scattering
       integer step                                                        ! skiping 2nd scat on 1 dim
       real*8 omemax                                                         ! max solid angle allowed
+      real*8 exclrad                                                        ! near-field exclusion radius (m): source-voxel pairs closer than this are dropped
+      real*8 obsgrd                                                         ! observer ground elevation override (m, absolute), optional 26th line
+      logical obsovr                                                      ! .true. when the 26th line is present
       real*8 tcloud                                                         ! low cloud transmission
       real*8 rx_sp,ry_sp                                                    ! position of a low cloud pixel
-      real*8 flcld(width,width)                                             ! flux crossing a low cloud
+      real*8, allocatable :: flcld(:,:)                                            ! flux crossing a low cloud
       real*8 ds1,ds2,ds3,dss                                                ! double scattering distances
       integer nss                                                         ! number of skipped 2nd scat elements
       integer ndi                                                         ! number of cell under ground
+      integer ncl                                                         ! number of 2nd scat cells above the cloud base (and otherwise valid)
+      integer cldwarn                                                     ! 1 when the cloud base discarded every 2nd scat cell at least once in this pointing
       integer nvol                                                        ! number of cell for second scat calc un full resolution
       real*8 diamobj                                                        ! instrument objective diameter
       integer i,j,k,id,jd
       real*8 tranam,tranaa                                                  ! atmospheric transmittancess of a path (molecular, aerosol)
       real*8 zhoriz                                                         ! zenith angle of the horizon
+      real*8 zhorob                                                         ! zenith angle of the horizon seen from the observer along the line of sight
       real*8 direct                                                         ! direct radiance from sources on a surface normal to the line of sight (no scattering)
       real*8 rdirect                                                        ! direct radiance from a reflecting surface on a surface normal to the line of sight (no scattering)
       real*8 irdirect                                                       ! direct irradiance from sources on a surface normal to the line of sight (no scattering)
@@ -238,10 +268,10 @@ c                                                                         ! a li
       real*8 dfov                                                           ! field of view in degrees for the calculation of the direct radiance this number will be a kind of smoothing effect. The angular grid resolution to create a direct radiance panorama should be finer than that number
       real*8 Fo                                                             ! flux correction factor for obstacles
       real*8 thetali                                                        ! limit angle for the obstacles blocking of viirs
-      integer viirs(width,width)                                          ! viirs flag 1=yes 0=no
-      character*72 vifile                                                 ! name of the viirs flag file
+      integer, allocatable :: viirs(:,:)                                         ! viirs flag 1=yes 0=no
+      character(maxnam) vifile                                            ! name of the viirs flag file
       real*8 dh0,dhmax                                                      ! horizontal distance along the line of sight and maximum distance before beeing blocked by topography
-      character*72 layfile                                                ! filename of the optical properties of the particle layer
+      character(maxnam) layfile                                           ! filename of the optical properties of the particle layer
       real*8 layaod                                                         ! 500 nm aod of the particle layer
       real*8 layalp                                                         ! spectral exponent of the aod for the particle layer
       real*8 hlay                                                           ! exponential vertical scale height of the particle layer
@@ -255,22 +285,32 @@ c                                                                         ! a li
       integer obsobs                                                      ! flag to activate the direct light obstacle blocking aroud the observer.
       verbose=1                                                           ! Very little printout=0, Many printout = 1, even more=2
       diamobj=1.                                                          ! A dummy value for the diameter of the objective of the instrument used by the observer.
-      volu=0.D0
-      zero=0.D0
+      volu=0.
+      zero=0.
       un=1.
-      ff=0.D0
-      ff2=0.D0
+      ff=0.
+      ff2=0.
       step=1
       ncible=1024
       stepdi=1
       cloudslope=-0.013
-      cloudfrac=100.D0
+      cloudfrac=100.
       if (verbose.ge.1) then
         print*,'Starting ILLUMINA computations...'
       endif
-c reading of the fichier d'entree (illumina.in)
-      print*,'Reading illumina.in input file'
-      open(unit=1,file='illumina.in',status='old')
+c NEW CHANGE HERE: allow a custom named input file to be given as CLI arguement
+      if (iargc()<1) then
+        inputfile='illumina.in'
+      else
+        call getarg(1,arg1)
+        inputfile=adjustl(arg1)
+      endif
+      print*,'Reading illumina input file ',trim(inputfile)
+      open(unit=1,file=inputfile,status='old',iostat=ios)
+      if (ios.ne.0) then
+        print*,'Error: cannot open parameter file ',trim(inputfile)
+        stop 1
+      endif
         read(1,*)
         read(1,*) basenm
         read(1,*) dx,dy
@@ -295,166 +335,271 @@ c reading of the fichier d'entree (illumina.in)
         read(1,*) reflsiz
         read(1,*) cloudt, cloudbase, cloudfrac
         read(1,*)
+c optional trailing line: near-field exclusion radius (m). A file
+c without that line keeps the historical 10 m.
+        read(1,*,iostat=ios) exclrad
+        if (ios.ne.0) exclrad=10.
+c optional 26th line (only after a 25th): absolute ground elevation at
+c the observer (m) from the finest DEM. Without it the observer stands
+c on the coarsened domain elevation altsol(x_obs,y_obs).
+        obsovr=.false.
+        obsgrd=0.
+        if (ios.eq.0) then
+          read(1,*,iostat=ios) obsgrd
+          if (ios.eq.0) obsovr=.true.
+        endif
       close(1)
-      if (angvis.gt.90.D0) then
-         print*,'Error: elevation angle larger than 90 deg'
-         stop
+      if (exclrad.le.0.) then
+        print*,'Error: exclusion radius must be positive, got',exclrad
+        stop 1
       endif
-      if (angvis.lt.-90.D0) then
-         print*,'Error: elevation angle smaller than -90 deg'
-         stop
+      if (obsovr) then
+        if ((obsgrd.ne.obsgrd).or.(obsgrd.lt.-500.).or.
+     +  (obsgrd.gt.9000.)) then
+          print*,'Error: observer ground elevation (line 26) must be',
+     +    ' finite and between -500 and 9000 m, got',obsgrd
+          stop 1
+        endif
       endif
-c conversion of the geographical viewing angles toward the cartesian
-c angle we assume that the angle in the file illumina.in
-c is consistent with the geographical definition
-c geographical, azim=0 toward north, 90 toward east, 180 toward south
-c etc
-c cartesian, azim=0 toward east, 90 toward north, 180 toward west etc
-      azim=90.D0-azim
-      if (azim.lt.0.D0) azim=azim+360.D0
-      if (azim.ge.360.D0) azim=azim-360.D0
-      angvi1 = (pi*angvis)/180.D0
-      angze1 = pi/2.-angvi1
-      angaz1 = (pi*azim)/180.D0
-      ix = (dsin((pi/2.)-angvi1) ) * (dcos(angaz1))                        ! viewing vector components
-      iy = (dsin((pi/2.)-angvi1) ) * (dsin(angaz1))
-      iz = (dsin(angvi1))
-      dfov=(dfov*pi/180.D0)/2.
-      siz=2500.D0
-      if (ssswit.eq.0) then
-        effdif=0.D0
+c NEW CHANGE HERE: optional third argument = angles list file. One
+c pointing per line 'elevation_deg azimuth_deg' (geographic azimuth,
+c the convention of the parameter file). Blank lines and lines that
+c start with '#' are skipped. Without that argument the single
+c pointing of the parameter file forms a list of length 1.
+      if (iargc()<3) then
+        anglesfile=' '
+        npts=1
+        allocate(elevs(npts),azims(npts))
+        elevs(1)=angvis
+        azims(1)=azim
       else
-        effdif=40000.D0
+        call getarg(3,arg3)
+        anglesfile=adjustl(arg3)
+        open(unit=1,file=anglesfile,status='old',iostat=ios)
+        if (ios.ne.0) then
+          print*,'Error: cannot open angles file ',trim(anglesfile)
+          stop 1
+        endif
+c first pass: count the pointings
+        npts=0
+        do
+          read(1,'(A)',iostat=ios) aline
+          if (ios.ne.0) exit
+          call angline(aline,lkind,elev1,azim1)
+          if (lkind.eq.2) then
+            print*,'Error: cannot parse angles file line: ',
+     +      trim(aline)
+            stop 1
+          endif
+          if (lkind.eq.1) npts=npts+1
+        enddo
+        close(1)
+        if (npts.lt.1) then
+          print*,'Error: no pointing found in angles file ',
+     +    trim(anglesfile)
+          stop 1
+        endif
+c second pass: store the pointings
+        allocate(elevs(npts),azims(npts))
+        open(unit=1,file=anglesfile,status='old')
+        ipt=0
+        do
+          read(1,'(A)',iostat=ios) aline
+          if (ios.ne.0) exit
+          call angline(aline,lkind,elev1,azim1)
+          if (lkind.eq.1) then
+            ipt=ipt+1
+            elevs(ipt)=elev1
+            azims(ipt)=azim1
+          endif
+        enddo
+        close(1)
+      endif
+      do ipt=1,npts
+        if (elevs(ipt).gt.90.) then
+          print*,'Error: elevation angle larger than 90 deg',
+     +    ' at pointing',ipt,elevs(ipt)
+          stop 1
+        endif
+        if (elevs(ipt).lt.-90.) then
+          print*,'Error: elevation angle smaller than -90 deg',
+     +    ' at pointing',ipt,elevs(ipt)
+          stop 1
+        endif
+      enddo
+c NEW CHANGE HERE: optional fourth argument 'maps' (default, write the
+c per-pointing contribution map <root>_pcl.bin) or 'nomaps' (skip it;
+c every other output is written).
+      wrmaps=1
+      if (iargc().ge.4) then
+        call getarg(4,arg4)
+        arg4=adjustl(arg4)
+        if (arg4.eq.'nomaps') then
+          wrmaps=0
+        elseif (arg4.eq.'maps') then
+          wrmaps=1
+        else
+          print*,'Error: argument 4 must be maps or nomaps, got ',
+     +    trim(arg4)
+          stop 1
+        endif
+      endif
+      dfov=(dfov*pi/180.)/2.
+      siz=2500.
+      if (ssswit.eq.0) then
+        effdif=0.
+      else
+        effdif=40000.
       endif
       scal=19.
       scalo=scal
-      boxx=idnint(reflsiz/dx)                                               ! Number of column to consider left/right of the source for the reflection.
-      boxy=idnint(reflsiz/dy)                                               ! Number of column to consider up/down of the source for the reflection.
-c omemax: exclude calculations too close (<10m) this is a sustended angle of 1 deg.
+c the box covers the disc of radius reflsiz around the source. Each
+c cell of the box is weighted by the fraction of its area inside the
+c disc (see discfrac), so the reflecting area is pi*reflsiz**2
+c whatever the cell size.
+      boxx=ceiling(reflsiz/dx)                                            ! Number of column to consider left/right of the source for the reflection.
+      boxy=ceiling(reflsiz/dy)                                            ! Number of column to consider up/down of the source for the reflection.
+c omemax: exclude calculations too close (<exclrad, 10 m by default)
+c this is a sustended angle of 1 deg.
 c the calculated flux is highly sensitive to that number for a very high
 c pixel resolution (a few 10th of meters). We assume anyway that somebody
 c observing the sky will never lies closer than that distance to a
 c light fixture. This number is however somehow subjective and that means
 c that the value of sky brightness near sources will be affected by this
 c choice
-      omemax=1./((10.D0)**2.)
+      omemax=1./(exclrad**2.)
       if (verbose.gt.0) then
         print*,'2nd order scattering grid = ',siz,'m'
         print*,'2nd order scattering radius=',effdif,'m'
         print*,'Pixel size = ',dx,' x ',dy
         print*,'Maximum radius for reflection = ',reflsiz
+        print*,'Near-field exclusion radius = ',exclrad,'m'
+      endif
+      if (dx.le.2.*exclrad) then
+        print*,'WARNING: cell size',dx,' m is at most twice the',
+     +  ' exclusion radius',exclrad,' m. Every source-voxel pair',
+     +  ' closer than the exclusion radius is dropped, so a large',
+     +  ' fraction of the near-field signal is discarded. Cells',
+     +  ' smaller than the exclusion radius are outside the valid',
+     +  ' range of the model.'
       endif
 c computing the actual AOD at the wavelength lambda
       if (verbose.ge.1) print*,'500nm AOD=',taua,'500nm angstrom coeff.=
      +',alpha
-      taua=taua*(lambda/500.D0)**(-1.*alpha)
-      layaod=layaod*(lambda/500.D0)**(-1.*layalp)
+      taua=taua*(lambda/500.)**(-1.*alpha)
+      layaod=layaod*(lambda/500.)**(-1.*layalp)
 c  determine the Length of basenm
-      lenbase=index(basenm,' ')-1
+      lenbase=len_trim(basenm)
+      if (lenbase.ge.maxnam) then
+        print*,'Error: base name longer than',maxnam-1,' characters'
+        stop 1
+      endif
+      call chknam('mnaf',lenbase+12,maxnam)
       mnaf=basenm(1:lenbase)//'_topogra.bin'                              ! determine the names of input and output files
-      outfile=basenm(1:lenbase)//'.out'
+      if ((ntype.lt.1).or.(ntype.gt.nzon)) then
+        print*,'Error: number of source types must be between 1 and',
+     +  nzon,' got',ntype
+        stop 1
+      endif
+c read the domain size from the topography header and allocate the
+c domain arrays to the actual size (no more fixed 512 x 512 padding)
+      call twodsize(mnaf,nbx,nby)
+      if (verbose.ge.1) print*,'Domain size (nbx,nby) = ',nbx,nby
+      allocate(drefle(nbx,nby),val2d(nbx,nby),altsol(nbx,nby))
+      allocate(lampal(nbx,nby),inclix(nbx,nby),incliy(nbx,nby))
+      allocate(obsH(nbx,nby),ofill(nbx,nby),ITC(nbx,nby),FTC(nbx,nby))
+      allocate(FCA(nbx,nby),lpluto(nbx,nby),flcld(nbx,nby))
+      allocate(viirs(nbx,nby))
+      allocate(lamplu(nbx,nby,ntype),ITT(nbx,nby,ntype))
+      if ((x_obs.lt.1).or.(x_obs.gt.nbx).or.(y_obs.lt.1).or.
+     +(y_obs.gt.nby)) then
+        print*,'Error: observer position outside the domain',x_obs,
+     +  y_obs,' domain',nbx,nby
+        stop 1
+      endif
+c NEW CHANGE HERE: allow for a custom output file name
+      if (iargc()<2) then
+        call chknam('outputfile',lenbase+4,maxnam)
+        outputfile=basenm(1:lenbase)//'.out'
+      else
+        call getarg(2,arg2)
+        outputfile=adjustl(arg2)
+      endif 
+      call chknam('pclf',lenbase+8,maxnam)
       pclf=basenm(1:lenbase)//'_pcl.txt'
+      call chknam('pclimg',lenbase+8,maxnam)
       pclimg=basenm(1:lenbase)//'_pcl.bin'
+      call chknam('pcwimg',lenbase+8,maxnam)
       pcwimg=basenm(1:lenbase)//'_pcw.bin'
+      call chknam('pclgp',lenbase+10,maxnam)
       pclgp=basenm(1:lenbase)//'_pcl.gplot'
-c opening output file
-      open(unit=2,file=outfile,status='unknown')
-        write(2,*) "ILLUMINA version __version__"
-        write(2,*) 'FILE USED:'
-        write(2,*) mnaf,diffil
-        print*,'Wavelength (nm):',lambda,
-     +       ' Aerosol optical depth:',taua
-        write(2,*) 'Wavelength (nm):',lambda,
-     +       ' Aerosol optical depth:',taua
-        write(2,*) '2nd order scattering radius:',effdif,' m'
-        print*,'2nd order scattering radius:',effdif,' m'
-        write(2,*) 'Observer position (x,y,z)',x_obs,y_obs,z_o
-        print*,'Observer position (x,y,z)',x_obs,y_obs,z_o
-        write(2,*) 'Elevation angle:',angvis,' azim angle (counterclockwise
-     +from east)',azim
-        print*,'Elevation angle:',angvis,' azim angle (counterclockwise
-     +from east)',azim
+c root of the output names = output file name without a trailing '.out'
+      lenout=len_trim(outputfile)
+      if ((lenout.gt.4).and.(outputfile(lenout-3:lenout).eq.'.out'))
+     +then
+        lenroot=lenout-4
+      else
+        lenroot=lenout
+      endif
+      outroot=outputfile(1:lenroot)
+      call chknam('allres',lenroot+12,maxnam)
+      allres=outroot(1:lenroot)//'_results.txt'
+      print*,'Parameter file: ',trim(inputfile)
+      print*,'Output file: ',trim(outputfile)
+      if (anglesfile.eq.' ') then
+        print*,'Angles file: none (pointing of the parameter file)'
+      else
+        print*,'Angles file: ',trim(anglesfile)
+      endif
+      print*,'Number of pointings:',npts
+      if (wrmaps.eq.1) then
+        print*,'Contribution maps (_pcl.bin): written'
+      else
+        print*,'Contribution maps (_pcl.bin): not written (nomaps)'
+      endif
+      print*,'Combined result file: ',trim(allres)
+c combined result record, one block per pointing, overwritten on re-run
+      open(unit=4,file=allres,status='unknown')
 c Initialisation of the arrays and variables
         if (verbose.ge.1) print*,'Initializing variables...'
         if (cloudt.eq.0) then
-          cloudbase=1000000000.D0
+          cloudbase=1000000000.
         endif
-        prmaps=1
-        iun=0
-        ideux=1
-        icloud=0.D0
-        do i=1,width
-          do j=1,width
-            val2d(i,j)=0.D0
-            altsol(i,j)=0.D0
-            obsH(i,j)=0.D0
-            drefle(i,j)=0.D0
-            viirs(i,j)=0.D0
-            ofill(i,j)=0.D0
-            inclix(i,j)=0.D0
-            incliy(i,j)=0.D0
-            flcld(i,j)=0.D0
-            lpluto(i,j)=0.D0
-            lampal(i,j)=0.D0
-            ITC(i,j)=0.D0
-            FTC(i,j)=0.D0
-            FCA(i,j)=0.D0
-            do k=1,nzon
-              lamplu(i,j,k)=0.D0
-              ITT(i,j,k)=0.D0
+        do i=1,nbx
+          do j=1,nby
+            val2d(i,j)=0.
+            altsol(i,j)=0.
+            obsH(i,j)=0.
+            viirs(i,j)=0
+            ofill(i,j)=0.
+            inclix(i,j)=0.
+            incliy(i,j)=0.
+            drefle(i,j)=0.
+            lampal(i,j)=0.
+            do k=1,ntype
+              lamplu(i,j,k)=0.
             enddo
           enddo
         enddo
+        do k=1,nzon
+          totlu(k)=0.
+        enddo
         do i=1,181
-          fdifa(i)=0.D0
-          fdifan(i)=0.D0
-          fdifl(i)=0.D0
-          anglea(i)=0.D0
+          fdifa(i)=0.
+          fdifan(i)=0.
+          fdifl(i)=0.
+          anglea(i)=0.
           do j=1,nzon
-            pval(i,j)=0.D0
-            pvalno(i,j)=0.D0
+            pval(i,j)=0.
+            pvalno(i,j)=0.
           enddo
         enddo
         do i=1,3000000
           do j=1,3
-            zondif(i,j)=1.D0
+            zondif(i,j)=1.
           enddo
         enddo
-        do i=1,nzon
-          totlu(i)=0.D0
-        enddo
-        idif1=0.D0
-        idif2=0.D0
-        fdif2=0.D0
-        idif2p=0.D0
-        fldir=0.D0
-        flindi=0.D0
-        fldiff=0.D0
-        pdifdi=0.D0
-        pdifin=0.D0
-        pdifd1=0.D0
-        pdifd2=0.D0
-        intdir=0.D0
-        intind=0.D0
-        idiff2=0.D0
-        angmin=0.D0
-        isourc=0.D0
-        itotty=0.D0
-        itotci=0.D0
-        itotrd=0.D0
-        flcib=0.D0
-        flrefl=0.D0
-        irefl=0.D0
-        irefl1=0.D0
-        fldif1=0.D0
-        fldif2=0.D0
-        portio=0.D0
-        fccld=0.D0
-        fctcld=0.D0
-        ometif=0.D0
-        omefov=0.D0
-        hh=1.
-        fcapt=0.D0
+        omefov=0.
 c determine the 2nd scattering zone
         if (ssswit.ne.0) then
           call zone_diffusion(effdif,
@@ -468,6 +613,7 @@ c determine the 2nd scattering zone
 c determination of the vertical atmospheric transmittance
         call transtoa(lambda,bandw,taua,layaod,pressi,tranam,tranaa,      ! tranam and tranaa are the top of atmosphere transmittance (molecules and aerosols)
      +tranal,tabs)
+
 c reading of the environment variables
 c reading of the elevation file
         call twodin(nbx,nby,mnaf,altsol)
@@ -475,28 +621,32 @@ c computation of the tilt of the pixels along x and along y
         do i=1,nbx                                                        ! beginning of the loop over the column (longitude) of the domain.
           do j=1,nby                                                      ! beginning of the loop over the rows (latitu) of the domain.
             if (i.eq.1) then                                              ! specific case close to the border of the domain (vertical side left).
-              inclix(i,j)=datan((altsol(i+1,j)-altsol(i,j))/dble(dx))      ! computation of the tilt along x of the surface.
+              inclix(i,j)=atan((altsol(i+1,j)-altsol(i,j))/dble(dx))      ! computation of the tilt along x of the surface.
             elseif (i.eq.nbx) then                                        ! specific case close to the border of the domain (vertical side right).
-              inclix(i,j)=datan((altsol(i-1,j)-altsol(i,j))/(dble(dx)))    ! computation of the tilt along x of the surface.
+              inclix(i,j)=atan((altsol(i-1,j)-altsol(i,j))/(dble(dx)))    ! computation of the tilt along x of the surface.
             else
-              inclix(i,j)=datan((altsol(i+1,j)-altsol(i-1,j))/(2.          ! computation of the tilt along x of the surface.
+              inclix(i,j)=atan((altsol(i+1,j)-altsol(i-1,j))/(2.          ! computation of the tilt along x of the surface.
      1        *dble(dx)))
             endif
             if (j.eq.1) then                                              ! specific case close to the border of the domain (horizontal side down).
-              incliy(i,j)=datan((altsol(i,j+1)-altsol(i,j))/(dble(dy)))    ! computation of the tilt along y of the surface.
+              incliy(i,j)=atan((altsol(i,j+1)-altsol(i,j))/(dble(dy)))    ! computation of the tilt along y of the surface.
             elseif (j.eq.nby) then                                        ! specific case close to the border of the domain (horizontal side up).
-              incliy(i,j)=datan((altsol(i,j-1)-altsol(i,j))/(dble(dy)))    ! computation of the tilt along y of the surface.
+              incliy(i,j)=atan((altsol(i,j-1)-altsol(i,j))/(dble(dy)))    ! computation of the tilt along y of the surface.
             else
-              incliy(i,j)=datan((altsol(i,j+1)-altsol(i,j-1))/(2.          ! computation of the tilt along y of the surface
+              incliy(i,j)=atan((altsol(i,j+1)-altsol(i,j-1))/(2.          ! computation of the tilt along y of the surface
      1        *dble(dy)))
             endif
           enddo                                                           ! end of the loop over the rows (latitu) of the domain
         enddo                                                             ! end of the loop over the column (longitude) of the domain
 c reading of the values of P(theta), height, luminosities and positions
 c of the sources, obstacle height and distance
+        call chknam('ohfile',lenbase+10,maxnam)
         ohfile=basenm(1:lenbase)//'_obsth.bin'
+        call chknam('odfile',lenbase+10,maxnam)
         odfile=basenm(1:lenbase)//'_obstd.bin'
+        call chknam('alfile',lenbase+10,maxnam)
         alfile=basenm(1:lenbase)//'_altlp.bin'                            ! setting the file name of height of the sources lumineuse.
+        call chknam('offile',lenbase+10,maxnam)
         offile=basenm(1:lenbase)//'_obstf.bin'
         vifile='origin.bin'
         dtheta=.017453293                                                 ! one degree
@@ -512,10 +662,6 @@ c reading subgrid obstacles average height
         do i=1,nbx                                                        ! beginning of the loop over all cells along x.
           do j=1,nby                                                      ! beginning of the loop over all cells along y.
             obsH(i,j)=val2d(i,j)                                          ! filling of the array
-            
-            !obsH(i,j)=0.
-            
-            
           enddo                                                           ! end of the loop over all cells along y.
         enddo
 c reading subgrid obstacles average distance
@@ -523,7 +669,7 @@ c reading subgrid obstacles average distance
         do i=1,nbx                                                        ! beginning of the loop over all cells along x.
           do j=1,nby                                                      ! beginning of the loop over all cells along y.
             drefle(i,j)=val2d(i,j)/2.
-            if (drefle(i,j).eq.0.D0) drefle(i,j)=dx                         ! when outside a zone, block to the size of the cell (typically 1km)
+            if (drefle(i,j).eq.0.) drefle(i,j)=dx                         ! when outside a zone, block to the size of the cell (typically 1km)
           enddo                                                           ! end of the loop over all cells along y.
         enddo
 c reading subgrid obstacles filling factor
@@ -537,7 +683,7 @@ c reading viirs flag
         call twodin(nbx,nby,vifile,val2d)
         do i=1,nbx                                                        ! beginning of the loop over all cells along x.
           do j=1,nby                                                      ! beginning of the loop over all cells along y.
-            viirs(i,j)=idnint(val2d(i,j))                                   ! viirs flag array 0 or 1
+            viirs(i,j)=nint(val2d(i,j))                                   ! viirs flag array 0 or 1
           enddo                                                           ! end of the loop over all cells along y.
         enddo
 c reading of the scattering parameters for background aerosols
@@ -560,9 +706,15 @@ c reading scattering parameters of particle layer
         close(1)
 c Some preliminary tasks
         do stype=1,ntype                                                  ! beginning of the loop 1 for the nzon types of sources.
-          pvalto=0.D0
+          imin(stype)=nbx
+          jmin(stype)=nby
+          imax(stype)=1
+          jmax(stype)=1
+          pvalto=0.
           write(lampno, '(I3.3)' ) stype                                  ! support of nzon different sources (3 digits)
+          call chknam('pafile',lenbase+14,maxnam)
           pafile=basenm(1:lenbase)//'_fctem_'//lampno//'.dat'             ! setting the file name of angular photometry.
+          call chknam('lufile',lenbase+14,maxnam)
           lufile=basenm(1:lenbase)//'_lumlp_'//lampno//'.bin'             ! setting the file name of the luminosite of the cases.
 c reading photometry files
           open(UNIT=1, FILE=pafile,status='OLD')                          ! opening file pa#.dat, angular photometry.
@@ -573,19 +725,58 @@ c reading photometry files
             enddo                                                         ! end of the loop over the 181 donnees of the fichier pa#.dat.
           close(1)                                                        ! closing file pa#.dat, angular photometry.
           do i=1,181
-            if (pvalto.ne.0.D0) pvalno(i,stype)=pval(i,stype)/pvalto        ! Normalisation of the photometric function.
+            if (pvalto.ne.0.) pvalno(i,stype)=pval(i,stype)/pvalto        ! Normalisation of the photometric function.
           enddo
 c reading luminosity files
           call twodin(nbx,nby,lufile,val2d)
           do i=1,nbx                                                      ! beginning of the loop over all cells along x.
             do j=1,nby                                                    ! beginning of the loop over all cells along y.
-              if (val2d(i,j).lt.0.D0) then                                  ! searching of negative fluxes
+              if (val2d(i,j).lt.0.) then                                  ! searching of negative fluxes
                 print*,'***Negative lamp flux!, stopping execution'
-                stop
+                stop 1
               endif
             enddo                                                         ! end of the loop over all cells along y.
           enddo
-
+          do i=1,nbx                                                      ! searching of the smallest rectangle containing the zone
+            do j=1,nby                                                    ! of non-null luminosity to speedup the calculation
+              if (val2d(i,j).ne.0.) then
+                if (i-1.lt.imin(stype)) imin(stype)=i-2
+                if (imin(stype).lt.1) imin(stype)=1
+                goto 333
+              endif
+            enddo
+          enddo
+          imin(stype)=1
+ 333      do i=nbx,1,-1
+            do j=1,nby
+              if (val2d(i,j).ne.0.) then
+                if (i+1.gt.imax(stype)) imax(stype)=i+2
+                if (imax(stype).gt.nbx) imax(stype)=nbx
+                goto 334
+              endif
+            enddo
+          enddo
+          imax(stype)=1
+ 334      do j=1,nby
+            do i=1,nbx
+              if (val2d(i,j).ne.0.) then
+                if (j-1.lt.jmin(stype)) jmin(stype)=j-2
+                if (jmin(stype).lt.1) jmin(stype)=1
+                goto 335
+              endif
+            enddo
+          enddo
+          jmin(stype)=1
+ 335      do j=nby,1,-1
+            do i=1,nbx
+              if (val2d(i,j).ne.0.) then
+                if (j+1.gt.jmax(stype)) jmax(stype)=j+2
+                if (jmax(stype).gt.nby) jmax(stype)=nby
+                goto 336
+              endif
+            enddo
+          enddo
+          jmax(stype)=1
  336      do i=1,nbx                                                      ! beginning of the loop over all cells along x.
             do j=1,nby                                                    ! beginning of the loop over all cells along y.
               lamplu(i,j,stype)=val2d(i,j)                                ! remplir the array of the lamp type: stype
@@ -594,10 +785,10 @@ c flux arrays (lumlp)
               if (viirs(i,j).eq.1) then
                 lamplu(i,j,stype)=lamplu(i,j,stype)/(tranam*tranaa*
      +          tranal)
-                thetali=datan2(drefle(i,j),obsH(i,j))
-                if (thetali .lt. 70.D0*pi/180.D0) then
-                  Fo=(1.-dcos(70.D0*pi/180.D0))/(1.-ofill(i,j)*
-     +            dcos(thetali)+(ofill(i,j)-1.)*dcos(70.D0*pi/180.D0))
+                thetali=atan2(drefle(i,j),obsH(i,j))
+                if (thetali .lt. 70.*pi/180.) then
+                  Fo=(1.-cos(70.*pi/180.))/(1.-ofill(i,j)*cos(thetali)+
+     +            (ofill(i,j)-1.)*cos(70.*pi/180.))
                   lamplu(i,j,stype)=lamplu(i,j,stype)*Fo
                 else
                   Fo=1.
@@ -606,72 +797,213 @@ c flux arrays (lumlp)
               totlu(stype)=totlu(stype)+lamplu(i,j,stype)                 ! the total lamp flux should be non-null to proceed to the calculations
             enddo                                                         ! end of the loop over all cells along y.
           enddo                                                           ! end of the loop over all cells along x.
+          print*,'Zone',stype,'bounding box: x=',imin(stype),
+     + imax(stype),'y=',jmin(stype),jmax(stype)
         enddo                                                             ! end of the loop 1 over the nzon types of sources.
         dy=dx
         omefov=0.00000001                                                 ! solid angle of the spectrometer slit on the sky. Here we only need a small value
-        z_obs=z_o+altsol(x_obs,y_obs)                                     ! z_obs = the local observer elevation plus the height of observation above ground (z_o)
+        if (obsovr) then
+          z_obs=z_o+obsgrd                                                ! observer ground from the parameter file (finest DEM), not the coarsened grid
+          print*,'INFO: observer ground elevation from line 26 =',
+     +    obsgrd,' m; domain grid gives',altsol(x_obs,y_obs),' m'
+        else
+          z_obs=z_o+altsol(x_obs,y_obs)                                   ! z_obs = the local observer elevation plus the height of observation above ground (z_o)
+        endif
         rx_obs=dble(x_obs)*dx
         ry_obs=dble(y_obs)*dy
-        if (z_obs.eq.0.D0) z_obs=0.001
+        if (z_obs.eq.0.) z_obs=0.001
         largx=dx*dble(nbx)                                                ! computation of the Width along x of the case.
         largy=dy*dble(nby)                                                ! computation of the Width along y of the case.
+c=======================================================================
+c     Loop over the pointings. Everything above this line is angle
+c     independent and runs once per process.
+c=======================================================================
+      do ipt=1,npts
+        angvis=elevs(ipt)
+        azim=azims(ipt)
+        if (angvis.gt.90.) then
+           print*,'Error: elevation angle larger than 90 deg'
+           stop 1
+        endif
+        if (angvis.lt.-90.) then
+           print*,'Error: elevation angle smaller than -90 deg'
+           stop 1
+        endif
+c conversion of the geographical viewing angles toward the cartesian
+c angle we assume that the angle in the file illumina.in
+c is consistent with the geographical definition
+c geographical, azim=0 toward north, 90 toward east, 180 toward south
+c etc
+c cartesian, azim=0 toward east, 90 toward north, 180 toward west etc
+      azimgeo=azim
+      azim=90.-azim
+      if (azim.lt.0.) azim=azim+360.
+      if (azim.ge.360.) azim=azim-360.
+      angvi1 = (pi*angvis)/180.
+      angze1 = pi/2.-angvi1
+      angaz1 = (pi*azim)/180.
+      ix = ( sin((pi/2.)-angvi1) ) * (cos(angaz1))                        ! viewing vector components
+      iy = ( sin((pi/2.)-angvi1) ) * (sin(angaz1))
+      iz = (sin(angvi1))
+c output file names of this pointing
+        if (npts.eq.1) then
+          outfile=outputfile
+          call chknam('resfile',lenroot+11,maxnam)
+          resfile=outroot(1:lenroot)//'_result.txt'
+        else
+          call angtag(angvis,etag,letag)
+          call angtag(azimgeo,atag,latag)
+          lentag=lenroot+letag+latag+4
+          call chknam('outfile',lentag+4,maxnam)
+          outfile=outroot(1:lenroot)//'_e'//etag(1:letag)//'_a'//
+     +    atag(1:latag)//'.out'
+          call chknam('pclimg',lentag+8,maxnam)
+          pclimg=outroot(1:lenroot)//'_e'//etag(1:letag)//'_a'//
+     +    atag(1:latag)//'_pcl.bin'
+          call chknam('resfile',lentag+11,maxnam)
+          resfile=outroot(1:lenroot)//'_e'//etag(1:letag)//'_a'//
+     +    atag(1:latag)//'_result.txt'
+        endif
+        print*,'Pointing',ipt,' of',npts,': elevation',angvis,
+     +  ' azimuth',azimgeo
+        print*,'Output file: ',trim(outfile)
+c opening output file
+      open(unit=2,file=outfile,status='unknown')
+        write(2,*) 'ILLUMINA version __version__'
+        write(2,*) 'FILE USED:'
+        write(2,*) mnaf,diffil
+        print*,'Wavelength (nm):',lambda,
+     +       ' Aerosol optical depth:',taua
+        write(2,*) 'Wavelength (nm):',lambda,
+     +       ' Aerosol optical depth:',taua
+        write(2,*) '2nd order scattering radius:',effdif,' m'
+        print*,'2nd order scattering radius:',effdif,' m'
+        write(2,*) 'Observer position (x,y,z)',x_obs,y_obs,z_o
+        if (obsovr) then
+          write(2,*) 'INFO: observer ground elevation from line 26 =',
+     +    obsgrd,' m; domain grid gives',altsol(x_obs,y_obs),' m'
+        endif
+        print*,'Observer position (x,y,z)',x_obs,y_obs,z_o
+        write(2,*) 'Elevation angle:',angvis,' azim angle (counterclockwise
+     +from east)',azim
+        print*,'Elevation angle:',angvis,' azim angle (counterclockwise
+     +from east)',azim
         write(2,*) 'Width of the domain [NS](m):',largx,'#cases:',nbx
         write(2,*) 'Width of the domain [EO](m):',largy,'#cases:',nby
         write(2,*) 'Size of a cell (m):',dx,' X ',dy
+        write(2,*) 'Near-field exclusion radius (m):',exclrad
+        if (dx.le.2.*exclrad) then
+          write(2,*) 'WARNING: cell size',dx,' m is at most twice the',
+     +    ' exclusion radius',exclrad,' m. Every source-voxel pair',
+     +    ' closer than the exclusion radius is dropped, so a large',
+     +    ' fraction of the near-field signal is discarded. Cells',
+     +    ' smaller than the exclusion radius are outside the valid',
+     +    ' range of the model.'
+        endif
         write(2,*) 'latitu center:',latitu
-
-
-
-
-
-
-        direct=0.D0                                                         ! initialize the total direct radiance from sources to observer
-        rdirect=0.D0                                                        ! initialize the total reflected radiance from surface to observer
-        irdirect=0.D0                                                       ! initialize the total direct irradiance from sources to observer
-        irrdirect=0.D0                                                      ! initialize the total reflected irradiance from surface to observer
+c Initialisation of the per-pointing accumulators, arrays and variables
+        prmaps=wrmaps
+        cldwarn=0
+        iun=0
+        ideux=1
+        icloud=0.
+        do i=1,nbx
+          do j=1,nby
+            lpluto(i,j)=0.
+            ITC(i,j)=0.
+            FTC(i,j)=0.
+            FCA(i,j)=0.
+            flcld(i,j)=0.
+            do k=1,ntype
+              ITT(i,j,k)=0.
+            enddo
+          enddo
+        enddo
+        idif1=0.
+        idif2=0.
+        fdif2=0.
+        idif2p=0.
+        fldir=0.
+        flindi=0.
+        fldiff=0.
+        pdifdi=0.
+        pdifin=0.
+        pdifd1=0.
+        pdifd2=0.
+        intdir=0.
+        intind=0.
+        idiff2=0.
+        angmin=0.
+        isourc=0.
+        itotty=0.
+        itotci=0.
+        itotrd=0.
+        flcib=0.
+        flrefl=0.
+        irefl=0.
+        irefl1=0.
+        fldif1=0.
+        fldif2=0.
+        portio=0.
+        fctcld=0.
+        ometif=0.
+        hh=1.
+        ff=0.
+        ff2=0.
+        volu=0.
+        itotind=0.
+        itodif=0.
+        fcapt=0.
+        ftocap=0.
+        scal=19.
+        scalo=scal
+        direct=0.                                                         ! initialize the total direct radiance from sources to observer
+        rdirect=0.                                                        ! initialize the total reflected radiance from surface to observer
+        irdirect=0.                                                       ! initialize the total direct irradiance from sources to observer
+        irrdirect=0.                                                      ! initialize the total reflected irradiance from surface to observer
 c =================================
 c Calculation of the direct radiances
 c
         if (verbose.ge.1) print*,' Calculating obtrusive light...'
         do stype=1,ntype                                                  ! beginning of the loop over the source types.
-          if (totlu(stype).ne.0.D0) then                                    ! check if there are any flux in that source type otherwise skip this lamp
+          if (totlu(stype).ne.0.) then                                    ! check if there are any flux in that source type otherwise skip this lamp
             if (verbose.ge.1) print*,' Turning on lamps',stype
             if (verbose.ge.1) write(2,*) ' Turning on lamps',
      +      stype
-            do x_s=1,nbx                                ! beginning of the loop over the column (longitude the) of the domain.
-            do y_s=1,nby                                ! beginning of the loop over the rows (latitud) of the domain.
-              intdir=0.D0
-              itotind=0.D0
-              itodif=0.D0
-              itotrd=0.D0
-              isourc=0.D0
+            do x_s=imin(stype),imax(stype)                                ! beginning of the loop over the column (longitude the) of the domain.
+            do y_s=jmin(stype),jmax(stype)                                ! beginning of the loop over the rows (latitud) of the domain.
+              intdir=0.
+              itotind=0.
+              itodif=0.
+              itotrd=0.
+              isourc=0.
               rx_s=dble(x_s)*dx
               ry_s=dble(y_s)*dy
-              if (lamplu(x_s,y_s,stype) .ne. 0.D0) then                     ! if the luminosite of the case is null, the program ignore this case.
+              if (lamplu(x_s,y_s,stype) .ne. 0.) then                     ! if the luminosite of the case is null, the program ignore this case.
                 z_s=(altsol(x_s,y_s)+lampal(x_s,y_s))                     ! Definition of the position (metre) vertical of the source.
 c
 c *********************************************************************************************************
 c calculation of the direct radiance of sources falling on a surface perpendicular
 c to the viewing angle Units of W/nm/m2/sr
 c *********************************************************************************************************
-                rx=rx_obs+20000.D0*ix
-                ry=ry_obs+20000.D0*iy
-                rz=z_obs+20000.D0*iz
+                rx=rx_obs+20000.*ix
+                ry=ry_obs+20000.*iy
+                rz=z_obs+20000.*iz
                 dho=sqrt((rx_obs-rx_s)**2.
      +          +(ry_obs-ry_s)**2.)
-                if ((dho.gt.0.D0).and.(z_s.ne.z_obs)) then
+                if ((dho.gt.0.).and.(z_s.ne.z_obs)) then
                   call anglezenithal(rx_obs,ry_obs,z_obs                  ! zenithal angle source-observer
      +            ,rx_s,ry_s,z_s,dzen)
                   call angleazimutal(rx_obs,ry_obs,rx_s,                  ! computation of the angle azimutal direct line of sight-source
      +            ry_s,angazi)
                   if (dzen.gt.pi/4.) then                                 ! 45deg. it is unlikely to have a 1km high mountain less than 1
                     call horizon(x_obs,y_obs,z_obs,dx,dy,
-     +              altsol,angazi,zhoriz,dh)
+     +              nbx,nby,altsol,angazi,zhoriz,dh)
                     if (dh.le.dho) then
                       if (dzen-zhoriz.lt.0.00001) then                    ! shadow the path line of sight-source is not below the horizon => we compute
                         hh=1.
                       else
-                        hh=0.D0
+                        hh=0.
                       endif
                     else
                       hh=1.
@@ -679,15 +1011,15 @@ c ******************************************************************************
                   else
                     hh=1.
                   endif
-               ff=0.D0   
+               ff=0.   
                if (obsobs.eq.1) then
 c sub-grid obstacles
                   if (dho.gt.drefle(x_obs,y_obs)+drefle(x_s,y_s)) then    ! light path to observer larger than the mean free path -> subgrid obstacles
-                    angmin=pi/2.-datan2((altsol(x_obs,y_obs)+
+                    angmin=pi/2.-atan2((altsol(x_obs,y_obs)+
      +              obsH(x_obs,y_obs)-z_obs),drefle(x_obs,
      +              y_obs))
                     if (dzen.lt.angmin) then                              ! condition sub-grid obstacles direct.
-                      ff=0.D0
+                      ff=0.
                     else
                       ff=ofill(x_obs,y_obs)
                     endif
@@ -700,13 +1032,13 @@ c sub-grid obstacles
                   
                   call anglezenithal(rx_s,ry_s,z_s                        ! zenithal angle source-observer
      +            ,rx_obs,ry_obs,z_obs,dzen)                  
-                  ff2=0.D0
+                  ff2=0.
                   if (dho.gt.drefle(x_s,y_s)) then                        ! light path from source larger than the mean free path -> subgrid obstacles
-                    angmin=pi/2.-datan2((altsol(x_s,y_s)+
+                    angmin=pi/2.-atan2((altsol(x_s,y_s)+
      +              obsH(x_s,y_s)-z_s),drefle(x_s,
      +              y_s))
                     if (dzen.lt.angmin) then                              ! condition sub-grid obstacles direct.
-                      ff2=0.D0
+                      ff2=0.
                     else
                       ff2=ofill(x_s,y_s)
                     endif
@@ -723,15 +1055,15 @@ c projection angle of line to the lamp and the viewing angle
      +            ry_obs,z_obs,rx,ry,rz,dang)
                   dang=pi-dang
 c computation of the solid angle of the line of sight voxel seen from the source
-                  anglez=idnint(180.D0*(pi-dzen)/pi)+1
+                  anglez=nint(180.*(pi-dzen)/pi)+1
                   P_dir=pvalno(anglez,stype)
 c computation of the flux direct reaching the line of sight voxel
-                  if ((dcos(dang).gt.0.D0).and.(dang.lt.pi/2.))
+                  if ((cos(dang).gt.0.).and.(dang.lt.pi/2.))
      +            then
-                    ddir_obs=dsqrt((rx_obs-rx_s)**2.+                      ! distance direct sight between source and observer
+                    ddir_obs=sqrt((rx_obs-rx_s)**2.+                      ! distance direct sight between source and observer
      +              (ry_obs-ry_s)**2.+(z_obs-z_s)**2.)
 c computation of the solid angle 1m^2 at the observer as seen from the source
-                    omega=1.*dabs(dcos(dang))/ddir_obs**2.
+                    omega=1.*abs(cos(dang))/ddir_obs**2.
                     call transmitm(dzen,z_obs,z_s,ddir_obs,
      +              transm,tranam,tabs)
                     call transmita(dzen,z_obs,z_s,ddir_obs,
@@ -764,10 +1096,13 @@ c
                   rx_sr=dble(x_sr)*dx
                   do y_sr=ysrmi,ysrma                                     ! beginning of the loop over the rows (latitu) reflecting.
                     ry_sr=dble(y_sr)*dy
-                    irefl=0.D0
+                    irefl=0.
                     z_sr=altsol(x_sr,y_sr)
+                    call discfrac(rx_sr,ry_sr,rx_s,ry_s,dx,dy,
+     +              reflsiz,afrac)
                     if((x_sr.gt.nbx).or.(x_sr.lt.1).or.
-     +              (y_sr.gt.nby).or.(y_sr.lt.1)) then
+     +              (y_sr.gt.nby).or.(y_sr.lt.1).or.
+     +              (afrac.le.0.)) then
                         if (verbose.eq.2) then
                           print*,'Ground cell out of borders'
                         endif
@@ -780,15 +1115,15 @@ c
                         else
                           haut=-(rx_s-rx_sr)*tan(                         ! if haut is negative, the ground cell is lighted from below
      +                    inclix(x_sr,y_sr))-(ry_s-
-     +                    ry_sr)*dtan(incliy(x_sr,
+     +                    ry_sr)*tan(incliy(x_sr,
      +                    y_sr))+z_s-z_sr
-                          if (haut .gt. 0.D0) then                          ! Condition: the ground cell is lighted from above
+                          if (haut .gt. 0.) then                          ! Condition: the ground cell is lighted from above
 c computation of the zenithal angle between the source and the surface reflectance
                             call anglezenithal(rx_s,ry_s,                 ! computation of the zenithal angle between the source and the line of sight voxel.
      +                      z_s,rx_sr,ry_sr,z_sr,                         ! end of the case "observer at the same latitu/longitude than the source".
      +                      angzen)
 c computation of the transmittance between the source and the ground surface
-                            distd=dsqrt((rx_s-rx_sr)**2.
+                            distd=sqrt((rx_s-rx_sr)**2.
      +                      +(ry_s-ry_sr)**2.+
      +                      (z_s-z_sr)**2.)
                             call transmitm(angzen,z_s,
@@ -806,61 +1141,45 @@ c computation of the solid angle of the reflecting cell seen from the source
                             zn=dble(z_s)                                  ! Position in meters of the source (altitude).
                             epsilx=inclix(x_sr,y_sr)                      ! tilt along x of the ground reflectance
                             epsily=incliy(x_sr,y_sr)                      ! tilt along x of the ground reflectance
-                            if (dx.gt.reflsiz) then                       ! use a sub-grid surface when the reflectance radius is smaller than the cell size
-                              if ((x_sr.eq.x_s).and.(y_sr
-     +                        .eq.y_s)) then
-                                dxp=reflsiz
-                              else
-                                dxp=dx
-                              endif
-                            else
-                              dxp=dx
-                            endif
-                            if (dy.gt.reflsiz) then
-                              if ((x_sr.eq.x_s).and.(y_sr
-     +                        .eq.y_s)) then
-                                dyp=reflsiz
-                              else
-                                dyp=dy
-                              endif
-                            else
-                              dyp=dy
-                            endif
-                            r1x=xc-dxp/2.-xn                        ! computation of the composante along x of the first vector.
-                            r1y=yc+dyp/2.-yn                        ! computation of the composante along y of the first vector.
-                            r1z=zc-dtan(epsilx)*
-     +                      dxp/2.+dtan(epsily)               ! computation of the composante en z of the first vector.
-     +                      *dyp/2.-zn
-                            r2x=xc+dxp/2.-xn                        ! computation of the composante along x of the second vector.
-                            r2y=yc+dyp/2.-yn                        ! computation of the composante along y of the second vector.
-                            r2z=zc+dtan(epsilx)*
-     +                      dxp/2.+dtan(epsily)               ! computation of the composante en z of the second vector.
-     +                      *dyp/2.-zn
-                            r3x=xc-dxp/2.-xn                        ! computation of the composante along x of the third vector.
-                            r3y=yc-dyp/2.-yn                        ! computation of the composante along y of the third vector.
-                            r3z=zc-dtan(epsilx)*
-     +                      dxp/2.-dtan(epsily)                ! computation of the composante en z of the third vector.
-     +                      *dyp/2.-zn
-                            r4x=xc+dxp/2.-xn                        ! computation of the composante along x of the fourth vector.
-                            r4y=yc-dyp/2.-yn                        ! computation of the composante along y of the fourth vector.
-                            r4z=zc+dtan(epsilx)*
-     +                      dxp/2.-dtan(epsily)                ! computation of the composante en z of the fourth vector.
-     +                      *dyp/2.-zn
+c reflecting surface = part of the cell inside the disc of radius
+c reflsiz around the source: a square of the same area (afrac*dx*dy)
+                            dxp=dx*sqrt(afrac)
+                            dyp=dy*sqrt(afrac)
+                            r1x=xc-dble(dxp)/2.-xn                        ! computation of the composante along x of the first vector.
+                            r1y=yc+dble(dyp)/2.-yn                        ! computation of the composante along y of the first vector.
+                            r1z=zc-tan(dble(epsilx))*
+     +                      dble(dxp)/2.+tan(dble(epsily))                ! computation of the composante en z of the first vector.
+     +                      *dble(dyp)/2.-zn
+                            r2x=xc+dble(dxp)/2.-xn                        ! computation of the composante along x of the second vector.
+                            r2y=yc+dble(dyp)/2.-yn                        ! computation of the composante along y of the second vector.
+                            r2z=zc+tan(dble(epsilx))*
+     +                      dble(dxp)/2.+tan(dble(epsily))                ! computation of the composante en z of the second vector.
+     +                      *dble(dyp)/2.-zn
+                            r3x=xc-dble(dxp)/2.-xn                        ! computation of the composante along x of the third vector.
+                            r3y=yc-dble(dyp)/2.-yn                        ! computation of the composante along y of the third vector.
+                            r3z=zc-tan(dble(epsilx))*
+     +                      dble(dxp)/2.-tan(dble(epsily))                ! computation of the composante en z of the third vector.
+     +                      *dble(dyp)/2.-zn
+                            r4x=xc+dble(dxp)/2.-xn                        ! computation of the composante along x of the fourth vector.
+                            r4y=yc-dble(dyp)/2.-yn                        ! computation of the composante along y of the fourth vector.
+                            r4z=zc+tan(dble(epsilx))*
+     +                      dble(dxp)/2.-tan(dble(epsily))                ! computation of the composante en z of the fourth vector.
+     +                      *dble(dyp)/2.-zn
                             call anglesolide(omega,r1x,                   ! Call of the routine anglesolide to compute the angle solide.
      +                      r1y,r1z,r2x,r2y,r2z,r3x,r3y,
      +                      r3z,r4x,r4y,r4z)
-         if (omega.lt.0.D0) then
+         if (omega.lt.0.) then
            print*,'ERROR: Solid angle of the reflecting surface < 0.'
-           stop
+           stop 1
          endif
 c estimation of the half of the underlying angle of the solid angle       ! this angle servira a obtenir un meilleur isime (moyenne) of
 c                                                                         ! P_dir for le cas of grans solid angles the , pvalno varie significativement sur +- ouvang.
-                            ouvang=dsqrt(omega/pi)                         ! Angle in radian.
-                            ouvang=ouvang*180.D0/pi                         ! Angle in degrees.
+                            ouvang=sqrt(omega/pi)                         ! Angle in radian.
+                            ouvang=ouvang*180./pi                         ! Angle in degrees.
 c computation of the photometric function of the light fixture toward the reflection surface
 c=======================================================================
 c
-                            anglez=idnint(180.D0*angzen/pi)
+                            anglez=nint(180.*angzen/pi)
                             if (anglez.lt.0)
      +                      anglez=-anglez
                             if (anglez.gt.180) anglez=360
@@ -868,19 +1187,18 @@ c
                             anglez=anglez+1                               ! Transform the angle in integer degree into the position in the array.
 c average +- ouvang
                             naz=0
-                            nbang=0.D0
-                            P_indir=0.D0
-                            do na=-idnint(ouvang),
-     +                      idnint(ouvang)
+                            nbang=0.
+                            P_indir=0.
+                            do na=-nint(ouvang),nint(ouvang)
                               naz=anglez+na
                               if (naz.lt.0) naz=-naz
                               if (naz.gt.181) naz=362-naz                 ! symetric function
                               if (naz.eq.0) naz=1
                               P_indir=P_indir+pvalno(naz,
-     +                        stype)*dabs(dsin(pi*dble(naz)
-     +                        /180.D0))/2.
-                              nbang=nbang+1.*dabs(dsin(pi*
-     +                        dble(naz)/180.D0))/2.
+     +                        stype)*abs(sin(pi*dble(naz)
+     +                        /180.))/2.
+                              nbang=nbang+1.*abs(sin(pi*
+     +                        dble(naz)/180.))/2.
                             enddo
                             P_indir=P_indir/nbang
 c computation of the flux reaching the reflecting surface
@@ -893,21 +1211,21 @@ c ******************************************************************************
 c calculation of the direct radiance from reflection falling on a surface perpendicular
 c to the viewing angle Units of W/nm/m2/sr
 c *********************************************************************************************************
-                            dho=dsqrt((rx_obs-rx_sr)**2.
+                            dho=sqrt((rx_obs-rx_sr)**2.
      +                      +(ry_obs-ry_sr)**2.)
-                            if ((dho.gt.0.D0).and.(z_s.ne.z_obs)) then
+                            if ((dho.gt.0.).and.(z_s.ne.z_obs)) then
                               call anglezenithal(rx_obs,ry_obs,z_obs      ! zenithal angle source-observer
      +                        ,rx_sr,ry_sr,z_sr,dzen)
                               call angleazimutal(rx_obs,ry_obs,rx_sr,     ! computation of the angle azimutal direct line of sight-source
      +                        ry_sr,angazi)
                               if (dzen.gt.pi/4.) then                     ! 45deg. it is unlikely to have a 1km high mountain less than 1
                                 call horizon(x_obs,y_obs,z_obs,dx,dy,
-     +                          altsol,angazi,zhoriz,dh)
+     +                          nbx,nby,altsol,angazi,zhoriz,dh)
                                 if (dh.le.dho) then
                                   if (dzen-zhoriz.lt.0.00001) then        ! shadow the path line of sight-source is not below the horizon => we compute
                                     hh=1.
                                   else
-                                    hh=0.D0
+                                    hh=0.
                                   endif
                                 else
                                   hh=1.
@@ -916,15 +1234,15 @@ c ******************************************************************************
                                 hh=1.
                               endif
 c sub-grid obstacles
-               ff=0.D0
+               ff=0.
                if (obsobs.eq.1) then
                               if (dho.gt.drefle(x_obs,y_obs)+
      +                        drefle(x_sr,y_sr)) then                     ! light path to observer larger than the mean free path -> subgrid obstacles
-                                angmin=pi/2.-datan2((altsol(x_obs,y_obs)
+                                angmin=pi/2.-atan2((altsol(x_obs,y_obs)
      +                          +obsH(x_obs,y_obs)-z_obs),drefle(x_obs,
      +                          y_obs))
                                 if (dzen.lt.angmin) then                  ! condition sub-grid obstacles direct.
-                                  ff=0.D0
+                                  ff=0.
                                 else
                                   ff=ofill(x_obs,y_obs)
                                 endif
@@ -935,13 +1253,13 @@ c sub-grid obstacles
                               
                   call anglezenithal(rx_sr,ry_sr,z_sr                     ! zenithal angle surface-observer
      +            ,rx_obs,ry_obs,z_obs,dzen)                  
-                  ff2=0.D0
+                  ff2=0.
                   if (dho.gt.drefle(x_sr,y_sr)) then                      ! light path from reflecting surface larger than the mean free path -> subgrid obstacles
-                    angmin=pi/2.-datan2((altsol(x_sr,y_sr)+
+                    angmin=pi/2.-atan2((altsol(x_sr,y_sr)+
      +              obsH(x_sr,y_sr)-z_sr),drefle(x_sr,
      +              y_sr))
                     if (dzen.lt.angmin) then                              ! condition sub-grid obstacles direct.
-                      ff2=0.D0
+                      ff2=0.
                     else
                       ff2=ofill(x_sr,y_sr)
                     endif
@@ -957,12 +1275,12 @@ c projection angle of line to the lamp and the viewing angle
                               dang=pi-dang
 
 c computation of the flux direct reaching the line of sight voxel
-                              if ((dcos(dang).gt.0.D0).and.(dang.lt.
-     +                        pi/2.)) then
-                                ddir_obs=dsqrt((rx_obs-rx_sr)**2.+         ! distance direct sight between source and observer
+                              if ((cos(dang).gt.0.).and.(dang.lt.pi/2.))
+     +                        then
+                                ddir_obs=sqrt((rx_obs-rx_sr)**2.+         ! distance direct sight between source and observer
      +                          (ry_obs-ry_sr)**2.+(z_obs-z_sr)**2.)
 c computation of the solid angle of the line of sight voxel seen from the source
-                                omega=1.*dabs(dcos(dang))/ddir_obs**2.
+                                omega=1.*abs(cos(dang))/ddir_obs**2.
                                 call transmitm(dzen,z_obs,z_sr,ddir_obs,
      +                          transm,tranam,tabs)
                                 call transmita(dzen,z_obs,z_sr,ddir_obs,
@@ -1002,41 +1320,43 @@ c Calculation of the scattered radiances
 c
 
 c temporaire !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        cloudtop=100000.D0
+        cloudtop=100000.
 
         if ((z_obs.ge.cloudbase).and.(z_obs.le.cloudtop)) then
           print*,'The observer is inside the cloud! Abort computing.',
      +    z_obs,cloudbase
-          stop
+          stop 1
         endif
  1110   format(I4,1x,I4,1x,I4)
-        fctcld=0.D0
-        ftocap=0.D0                                                         ! Initialisation of the value of flux received by the sensor
-        call horizon(x_obs,y_obs,z_obs,dx,dy,altsol,angaz1,zhoriz,        ! calculating the distance before the line of sight beeing blocked by topography
-     +  dhmax)
+        fctcld=0.
+        ftocap=0.                                                         ! Initialisation of the value of flux received by the sensor
+        call horizon(x_obs,y_obs,z_obs,dx,dy,nbx,nby,altsol,angaz1,       ! calculating the distance before the line of sight beeing blocked by topography
+     +  zhorob,dhmax)
         rx_c=dble(x_obs)*dx-ix*scal/2.
         ry_c=dble(y_obs)*dx-iy*scal/2.
         z_c=z_obs-iz*scal/2.
         do icible=1,ncible                                                ! beginning of the loop over the line of sight voxels
+          icloud=0.
           rx_c=rx_c+ix*(scalo/2.+scal/2.)
           ry_c=ry_c+iy*(scalo/2.+scal/2.)
-        dh0=dsqrt((rx_c-rx_obs)**2.+(ry_c-ry_obs)**2)
-          if ((dh0.le.dhmax).or.((dh0.gt.dhmax).and.(angze1-zhoriz.lt.    ! the line of sight is not yet blocked by the topography
+        dh0=sqrt((rx_c-rx_obs)**2.+(ry_c-ry_obs)**2)
+          if ((dh0.le.dhmax).or.((dh0.gt.dhmax).and.(angze1-zhorob.lt.    ! the line of sight is not yet blocked by the topography
      +    0.00001))) then
-          x_c=idnint(rx_c/dx)
+          x_c=nint(rx_c/dx)
           if (x_c.lt.1) x_c=1
-          if (x_c.gt.width) x_c=width
+          if (x_c.gt.nbx) x_c=nbx
           y_c=nint(ry_c/dy)
           if (y_c.lt.1) y_c=1
-          if (y_c.gt.width) y_c=width
+          if (y_c.gt.nby) y_c=nby
           z_c=z_c+iz*(scalo/2.+scal/2.)
           if (z_c.gt.altsol(x_c,y_c)) then
           if ((fcapt.ge.ftocap/stoplim).and.(z_c.lt.cloudbase).and.       ! stop the calculation of the viewing line when the increment is lower than 1/stoplim
-     +    (z_c.lt.35000.D0)) then                                           ! or when hitting a cloud or when z>40km (scattering probability =0 (given precision)
-            fcapt=0.D0
+     +    (z_c.lt.35000.)) then                                           ! or when hitting a cloud or when z>35km (scattering probability =0 (given precision)
+            fctcld=0.
+            fcapt=0.
             do i=1,nbx
               do j=1,nby
-                FCA(i,j)=0.D0
+                FCA(i,j)=0.
               enddo
             enddo
 c Calculate the solid angle of the line of sight voxel unit voxel
@@ -1048,20 +1368,20 @@ c encompass more than the voxel size. This correction is done with the
 c portio parameter calculated as the ratio of the solid angle of the
 c observer FOV over the line of sight voxel solid angle as seen from the
 c observer.
-            distd=dsqrt((rx_c-rx_obs)**2.+
+            distd=sqrt((rx_c-rx_obs)**2.+
      +      (ry_c-ry_obs)**2.+(z_c-z_obs)**2.)
 c computation of the Solid angle of the line of sight voxel seen from the observer
             omega=1./distd**2.
             if (omega.gt.omemax) then
-              omega=0.D0
-              portio=0.D0
+              omega=0.
+              portio=0.
             else
               portio=(omefov/omega)
             endif
-            itotci=0.D0                                                     ! Initialisation of the contribution of the line of sight at the sensor level
+            itotci=0.                                                     ! Initialisation of the contribution of the line of sight at the sensor level
             do i=1,nbx
               do j=1,nby
-                ITC(i,j)=0.D0
+                ITC(i,j)=0.
               enddo
             enddo
             if( (rx_c.gt.dble(nbx*dx)).or.(rx_c.lt.dx).or.                ! Condition line of sight inside the modelling domain
@@ -1072,47 +1392,74 @@ c computation of the Solid angle of the line of sight voxel seen from the observ
       if (verbose.ge.1) print*,' Progression along the line of sight :'
      +,icible
       if (verbose.ge.1) print*,' Horizontal dist. line of sight =',
-     +dsqrt((rx_c-rx_obs)**2.+(ry_c-ry_obs)**2.),' m'
+     +sqrt((rx_c-rx_obs)**2.+(ry_c-ry_obs)**2.),' m'
       if (verbose.ge.1) print*,' Vertical dist. line of sight =',
-     +dabs(z_c-z_obs),' m'
+     +abs(z_c-z_obs),' m'
               if (verbose.ge.1) write(2,*) '========================
      +====================='
       if (verbose.ge.1) write(2,*) ' Progression along the line of sight
      + :',icible
       if (verbose.ge.1) write(2,*) ' Horizontal dist. line of sight =',
-     +dsqrt((rx_c-rx_obs)**2.+(ry_c-ry_obs)**2.),' m'
+     +sqrt((rx_c-rx_obs)**2.+(ry_c-ry_obs)**2.),' m'
       if (verbose.ge.1) write(2,*) ' Vertical dist. line of sight =',
-     +dabs(z_c-z_obs),' m'
+     +abs(z_c-z_obs),' m'
               dis_obs=sqrt((z_c-z_obs)**2.+(ry_c-ry_obs)**2.
      +          +(rx_c-rx_obs)**2.)
-              if (dis_obs.eq.0.D0) then
+              if (dis_obs.eq.0.) then
                 print*,'ERROR problem with dis_obs',dis_obs
                 print*,rx_c,x_obs,y_c,y_obs,z_c,z_obs
-                stop
+                stop 1
               endif
               ometif=pi*(diamobj/2.)**2./dis_obs**2.
 c beginning of the loop over the types of light sources
               do stype=1,ntype                                            ! beginning of the loop over the source types.
-                if (totlu(stype).ne.0.D0) then                              ! check if there are any flux in that source type otherwise skip this lamp
+                if (totlu(stype).ne.0.) then                              ! check if there are any flux in that source type otherwise skip this lamp
                   if (verbose.ge.1) print*,' Turning on lamps',stype
                   if (verbose.ge.1) write(2,*) ' Turning on lamps',
      +            stype
-                  itotty=0.D0                                               ! Initialisation of the contribution of a source types to
+                  itotty=0.                                               ! Initialisation of the contribution of a source types to
                   do x_s=1,nbx                                            ! the intensity toward the sensor by a line of sight voxel.
                     do y_s=1,nby
-                      ITT(x_s,y_s,stype)=0.D0
+                      ITT(x_s,y_s,stype)=0.
                     enddo
                   enddo
-                  do x_s=1,nbx                          ! beginning of the loop over the column (longitude the) of the domain.
-                    do y_s=1,nby                        ! beginning of the loop over the rows (latitud) of the domain.
-                      intdir=0.D0
-                      itotind=0.D0
-                      itodif=0.D0
-                      itotrd=0.D0
-                      isourc=0.D0
+c OpenMP: the source cells of one line of sight voxel and one lamp
+c type are independent. itotty is the only scalar summed over the
+c cells; ITT(x_s,y_s,stype) is written once per iteration. icloud is a
+c running sum that the loop also reads (isourc=isourc+icloud), so the
+c loop runs on one thread when clouds are on (if clause). pi is a
+c parameter and cannot appear in a clause.
+!$omp parallel do default(none) if(cloudt.eq.0)
+!$omp& collapse(2) schedule(dynamic,4)
+!$omp& reduction(+:itotty) reduction(max:cldwarn)
+!$omp& shared(imin,imax,jmin,jmax,stype,ntype,nbx,nby,dx,dy,altsol,
+!$omp& lampal,lamplu,drefle,obsH,ofill,inclix,incliy,pvalno,rx_c,ry_c,
+!$omp& z_c,rx_obs,ry_obs,z_obs,haer,hlay,tranam,tranaa,tranal,tabs,un,
+!$omp& secdif,secdil,fdifan,fdifl,omemax,omefov,portio,boxx,boxy,
+!$omp& reflsiz,srefl,effdif,zondif,ndiff,stepdi,siz,dss,cloudt,
+!$omp& cloudbase,iz,scal,verbose,ITT,icloud)
+!$omp& private(x_s,y_s,x_sr,y_sr,idi,na,naz,anglez,dirck,xsrmi,xsrma,
+!$omp& ysrmi,ysrma,x_dif,y_dif,id,jd,nss,ndi,ncl,rx_s,ry_s,z_s,rx_sr,
+!$omp& ry_sr,
+!$omp& z_sr,rx_dif,ry_dif,z_dif,distd,dho,angzen,angazi,zhoriz,dh,hh,
+!$omp& ff,angmin,transm,transa,transl,omega,P_dir,P_indir,P_dif1,fldir,
+!$omp& angdif,pdifdi,intdir,azcl1,azcl2,doc2,dsc2,rcloud,itotind,
+!$omp& itotrd,itodif,isourc,irefl,irefl1,intind,haut,ouvang,nbang,
+!$omp& flrefl,flindi,pdifin,ds1,ds2,ds3,fldif2,pdifd1,volu,idif2,fdif2,
+!$omp& pdifd2,idif2p,fldif1,idif1,fldiff,idiff2,epsilx,epsily,dxp,dyp,
+!$omp& afrac,
+!$omp& xc,yc,zc,xn,yn,zn,r1x,r1y,r1z,r2x,r2y,r2z,r3x,r3y,r3z,r4x,r4y,
+!$omp& r4z)
+                  do x_s=imin(stype),imax(stype)                          ! beginning of the loop over the column (longitude the) of the domain.
+                    do y_s=jmin(stype),jmax(stype)                        ! beginning of the loop over the rows (latitud) of the domain.
+                      intdir=0.
+                      itotind=0.
+                      itodif=0.
+                      itotrd=0.
+                      isourc=0.
                       rx_s=dble(x_s)*dx
                       ry_s=dble(y_s)*dy
-                      if (lamplu(x_s,y_s,stype) .ne. 0.D0) then             ! if the luminosite of the case is null, the program ignore this case.
+                      if (lamplu(x_s,y_s,stype) .ne. 0.) then             ! if the luminosite of the case is null, the program ignore this case.
                         z_s=(altsol(x_s,y_s)+lampal(x_s,y_s))             ! Definition of the position (metre) vertical of the source.
 c
 c *********************************************************************************************************
@@ -1131,23 +1478,23 @@ c ******************************************************************************
                         if (dirck.ne.1) then                              ! the source is not at the line of sight voxel position
 c computation of the zenithal angle between the source and the line of sight
 c computation of the horizon for the resolved shadows direct              ! horizon resolution is 1 degree
-                              distd=dsqrt((rx_c-rx_s)**2.
+                              distd=sqrt((rx_c-rx_s)**2.
      +                        +(ry_c-ry_s)**2.
      +                        +(z_c-z_s)**2.)
-                              dho=dsqrt((rx_c-rx_s)**2.
+                              dho=sqrt((rx_c-rx_s)**2.
      +                        +(ry_c-ry_s)**2.)
                               call anglezenithal(rx_s,ry_s,z_s
      +                        ,rx_c,ry_c,z_c,angzen)                      ! computation of the zenithal angle between the source and the line of sight voxel.
                               call angleazimutal(rx_s,ry_s,rx_c,          ! computation of the angle azimutal direct line of sight-source
      +                        ry_c,angazi)
                               if (angzen.gt.pi/4.) then                   ! 45deg. it is unlikely to have a 1km high mountain less than 1
-                                call horizon(x_s,y_s,z_s,dx,dy,altsol,
-     +                          angazi,zhoriz,dh)
+                                call horizon(x_s,y_s,z_s,dx,dy,nbx,nby,
+     +                          altsol,angazi,zhoriz,dh)
                                 if (dh.le.dho) then
                                   if (angzen-zhoriz.lt.0.00001) then      ! shadow the path line of sight-source is not below the horizon => we compute
                                     hh=1.
                                   else
-                                    hh=0.D0
+                                    hh=0.
                                   endif
                                 else
                                   hh=1.
@@ -1156,12 +1503,12 @@ c computation of the horizon for the resolved shadows direct              ! hori
                                 hh=1.
                               endif
 c sub-grid obstacles
-                              ff=0.D0
+                              ff=0.
                               if (dho.gt.drefle(x_s,y_s)) then            ! light path to observer larger than the mean free path -> subgrid obstacles
-                                angmin=pi/2.-datan2((altsol(x_s,y_s)+
+                                angmin=pi/2.-atan2((altsol(x_s,y_s)+
      +                          obsH(x_s,y_s)-z_s),drefle(x_s,y_s))
                                 if (angzen.lt.angmin) then                ! condition sub-grid obstacles direct.
-                                  ff=0.D0
+                                  ff=0.
                                 else
                                   ff=ofill(x_s,y_s)
                                 endif
@@ -1175,15 +1522,15 @@ c computation of the transmittance between the source and the line of sight
      +                        hlay,transl,tranal)
 c computation of the solid angle of the line of sight voxel seen from the source
                               omega=1./distd**2.
-                              if (omega.gt.omemax) omega=0.D0
-                              anglez=idnint(180.D0*angzen/pi)+1
+                              if (omega.gt.omemax) omega=0.
+                              anglez=nint(180.*angzen/pi)+1
                               P_dir=pvalno(anglez,stype)
 c computation of the flux reaching the line of sight voxel
                               fldir=lamplu(x_s,y_s,stype)*P_dir*
      +                        omega*transm*transa*transl*(1.-ff)*hh       ! correction for obstacle filling factor
 c computation of the scattering probability of the direct light
 c distance pour traverser la cellule unitaire parfaitement orientée
-                              if (omega.ne.0.D0) then
+                              if (omega.ne.0.) then
                                 call angle3points (rx_s,ry_s,z_s,rx_c,    ! scattering angle.
      +                          ry_c,z_c,rx_obs,ry_obs,z_obs,
      +                          angdif)
@@ -1191,13 +1538,13 @@ c distance pour traverser la cellule unitaire parfaitement orientée
      +                          tranam,tranaa,tranal,un,secdif,secdil,
      +                          fdifan,fdifl,haer,hlay,pdifdi,z_c)
                               else
-                                pdifdi=0.D0
+                                pdifdi=0.
                               endif
 c computation of the source contribution to the scattered intensity toward the sensor by a line of sight voxel
                               intdir=fldir*pdifdi
 c contribution of the cloud reflection of the light coming directly from the source
                               if (cloudt.ne.0) then                       ! line of sight voxel = cloud
-                                if (cloudbase-z_c.le.iz*scal) then
+                                if (cloudbase-z_c.le.1.20*iz*scal) then
                                   call anglezenithal(rx_c,ry_c,z_c,
      +                            rx_obs,ry_obs,z_obs,azcl1)              ! zenith angle from cloud to observer
                                   call anglezenithal(rx_c,ry_c,z_c,
@@ -1210,11 +1557,11 @@ c contribution of the cloud reflection of the light coming directly from the sou
      +                            cloudt,rcloud)
                                   icloud=icloud+
      +                            fldir/omega*rcloud*doc2*omefov*
-     +                            dabs(dcos(azcl2)/dcos(azcl1))/dsc2/pi
+     +                            abs(cos(azcl2)/cos(azcl1))/dsc2/pi
                                 endif
                               endif
                         else
-                          intdir=0.D0
+                          intdir=0.
                         endif                                             ! end of the case Position Source is not equal to the line of sight voxel position
 c end of the computation of the scattered intensity
 c
@@ -1225,8 +1572,8 @@ c ******************************************************************************
 c * computation of the scattered light toward the observer by a line of sight voxel lighted by the ground reflection    *
 c **********************************************************************************************************************
 c etablissement of the conditions ands boucles
-                            itotind=0.D0                                    ! Initialisation of the reflected intensity of the source
-                            itotrd=0.D0
+                            itotind=0.                                    ! Initialisation of the reflected intensity of the source
+                            itotrd=0.
                             xsrmi=x_s-boxx
                             if (xsrmi.lt.1) xsrmi=1
                             xsrma=x_s+boxx
@@ -1239,10 +1586,13 @@ c etablissement of the conditions ands boucles
                               rx_sr=dble(x_sr)*dx
                               do y_sr=ysrmi,ysrma                         ! beginning of the loop over the rows (latitu) reflecting.
                                 ry_sr=dble(y_sr)*dy
-                                irefl=0.D0
+                                irefl=0.
                                 z_sr=altsol(x_sr,y_sr)
+                                call discfrac(rx_sr,ry_sr,rx_s,ry_s,
+     +                          dx,dy,reflsiz,afrac)
                                 if((x_sr.gt.nbx).or.(x_sr.lt.1).or.
-     +                          (y_sr.gt.nby).or.(y_sr.lt.1)) then
+     +                          (y_sr.gt.nby).or.(y_sr.lt.1).or.
+     +                          (afrac.le.0.)) then
                                   if (verbose.eq.2) then
                                     print*,'Ground cell out of borders'
                                   endif
@@ -1253,17 +1603,17 @@ c etablissement of the conditions ands boucles
                                       print*,'Source pos = Ground cell'
                                     endif
                                   else
-                                      haut=-(rx_s-rx_sr)*dtan(             ! if haut is negative, the ground cell is lighted from below
+                                      haut=-(rx_s-rx_sr)*tan(             ! if haut is negative, the ground cell is lighted from below
      +                                inclix(x_sr,y_sr))-(ry_s-
-     +                                ry_sr)*dtan(incliy(x_sr,
+     +                                ry_sr)*tan(incliy(x_sr,
      +                                y_sr))+z_s-z_sr
-                                      if (haut .gt. 0.D0) then              ! Condition: the ground cell is lighted from above
+                                      if (haut .gt. 0.) then              ! Condition: the ground cell is lighted from above
 c computation of the zenithal angle between the source and the surface reflectance
                                         call anglezenithal(rx_s,ry_s,     ! computation of the zenithal angle between the source and the line of sight voxel.
      +                                  z_s,rx_sr,ry_sr,z_sr,             ! end of the case "observer at the same latitu/longitude than the source".
      +                                  angzen)
 c computation of the transmittance between the source and the ground surface
-                                        distd=dsqrt((rx_s-rx_sr)**2.
+                                        distd=sqrt((rx_s-rx_sr)**2.
      +                                  +(ry_s-ry_sr)**2.+
      +                                  (z_s-z_sr)**2.)
                                         call transmitm(angzen,z_s,
@@ -1281,61 +1631,45 @@ c computation of the solid angle of the reflecting cell seen from the source
                                         zn=dble(z_s)                      ! Position in meters of the source (altitude).
                                         epsilx=inclix(x_sr,y_sr)          ! tilt along x of the ground reflectance
                                         epsily=incliy(x_sr,y_sr)          ! tilt along x of the ground reflectance
-                                        if (dx.gt.reflsiz) then           ! use a sub-grid surface when the reflectance radius is smaller than the cell size
-                                          if ((x_sr.eq.x_s).and.(y_sr
-     +                                    .eq.y_s)) then
-                                            dxp=reflsiz
-                                          else
-                                            dxp=dx
-                                          endif
-                                        else
-                                          dxp=dx
-                                        endif
-                                        if (dy.gt.reflsiz) then
-                                          if ((x_sr.eq.x_s).and.(y_sr
-     +                                    .eq.y_s)) then
-                                            dyp=reflsiz
-                                          else
-                                            dyp=dy
-                                          endif
-                                        else
-                                          dyp=dy
-                                        endif
-                                        r1x=xc-dxp/2.-xn            ! computation of the composante along x of the first vector.
-                                        r1y=yc+dyp/2.-yn            ! computation of the composante along y of the first vector.
-                                        r1z=zc-dtan(epsilx)*
-     +                                  dxp/2.+dtan(epsily)    ! computation of the composante en z of the first vector.
-     +                                  *dyp/2.-zn
-                                        r2x=xc+dxp/2.-xn            ! computation of the composante along x of the second vector.
-                                        r2y=yc+dyp/2.-yn            ! computation of the composante along y of the second vector.
-                                        r2z=zc+dtan(epsilx)*
-     +                                  dxp/2.+dtan(epsily)    ! computation of the composante en z of the second vector.
-     +                                  *dyp/2.-zn
-                                        r3x=xc-dxp/2.-xn            ! computation of the composante along x of the third vector.
-                                        r3y=yc-dyp/2.-yn            ! computation of the composante along y of the third vector.
-                                        r3z=zc-dtan(epsilx)*
-     +                                  dxp/2.-dtan(epsily)    ! computation of the composante en z of the third vector.
-     +                                  *dyp/2.-zn
-                                        r4x=xc+dxp/2.-xn            ! computation of the composante along x of the fourth vector.
-                                        r4y=yc-dyp/2.-yn            ! computation of the composante along y of the fourth vector.
-                                        r4z=zc+dtan(epsilx)*
-     +                                  dxp/2.-dtan(epsily)    ! computation of the composante en z of the fourth vector.
-     +                                  *dyp/2.-zn
+c reflecting surface = part of the cell inside the disc of radius
+c reflsiz around the source: a square of the same area (afrac*dx*dy)
+                                        dxp=dx*sqrt(afrac)
+                                        dyp=dy*sqrt(afrac)
+                                        r1x=xc-dble(dxp)/2.-xn            ! computation of the composante along x of the first vector.
+                                        r1y=yc+dble(dyp)/2.-yn            ! computation of the composante along y of the first vector.
+                                        r1z=zc-tan(dble(epsilx))*
+     +                                  dble(dxp)/2.+tan(dble(epsily))    ! computation of the composante en z of the first vector.
+     +                                  *dble(dyp)/2.-zn
+                                        r2x=xc+dble(dxp)/2.-xn            ! computation of the composante along x of the second vector.
+                                        r2y=yc+dble(dyp)/2.-yn            ! computation of the composante along y of the second vector.
+                                        r2z=zc+tan(dble(epsilx))*
+     +                                  dble(dxp)/2.+tan(dble(epsily))    ! computation of the composante en z of the second vector.
+     +                                  *dble(dyp)/2.-zn
+                                        r3x=xc-dble(dxp)/2.-xn            ! computation of the composante along x of the third vector.
+                                        r3y=yc-dble(dyp)/2.-yn            ! computation of the composante along y of the third vector.
+                                        r3z=zc-tan(dble(epsilx))*
+     +                                  dble(dxp)/2.-tan(dble(epsily))    ! computation of the composante en z of the third vector.
+     +                                  *dble(dyp)/2.-zn
+                                        r4x=xc+dble(dxp)/2.-xn            ! computation of the composante along x of the fourth vector.
+                                        r4y=yc-dble(dyp)/2.-yn            ! computation of the composante along y of the fourth vector.
+                                        r4z=zc+tan(dble(epsilx))*
+     +                                  dble(dxp)/2.-tan(dble(epsily))    ! computation of the composante en z of the fourth vector.
+     +                                  *dble(dyp)/2.-zn
                                         call anglesolide(omega,r1x,       ! Call of the routine anglesolide to compute the angle solide.
      +                                  r1y,r1z,r2x,r2y,r2z,r3x,r3y,
      +                                  r3z,r4x,r4y,r4z)
-         if (omega.lt.0.D0) then
+         if (omega.lt.0.) then
            print*,'ERROR: Solid angle of the reflecting surface < 0.'
-           stop
+           stop 1
          endif
 c estimation of the half of the underlying angle of the solid angle       ! this angle servira a obtenir un meilleur isime (moyenne) of
 c                                                                         ! P_dir for le cas of grans solid angles the , pvalno varie significativement sur +- ouvang.
-                                        ouvang=dsqrt(omega/pi)             ! Angle in radian.
-                                        ouvang=ouvang*180.D0/pi             ! Angle in degrees.
+                                        ouvang=sqrt(omega/pi)             ! Angle in radian.
+                                        ouvang=ouvang*180./pi             ! Angle in degrees.
 c computation of the photometric function of the light fixture toward the reflection surface
 c=======================================================================
 c
-                                        anglez=idnint(180.D0*angzen/pi)
+                                        anglez=nint(180.*angzen/pi)
                                         if (anglez.lt.0)
      +                                  anglez=-anglez
                                         if (anglez.gt.180) anglez=360
@@ -1343,19 +1677,18 @@ c
                                         anglez=anglez+1                   ! Transform the angle in integer degree into the position in the array.
 c average +- ouvang
                                         naz=0
-                                        nbang=0.D0
-                                        P_indir=0.D0
-                                        do na=-idnint(ouvang),
-     +                                  idnint(ouvang)
+                                        nbang=0.
+                                        P_indir=0.
+                                        do na=-nint(ouvang),nint(ouvang)
                                           naz=anglez+na
                                           if (naz.lt.0) naz=-naz
                                           if (naz.gt.181) naz=362-naz     ! symetric function
                                           if (naz.eq.0) naz=1
                                           P_indir=P_indir+pvalno(naz,
-     +                                    stype)*dabs(dsin(pi*dble(naz)
-     +                                    /180.D0))/2.
-                                          nbang=nbang+1.*dabs(dsin(pi*
-     +                                    dble(naz)/180.D0))/2.
+     +                                    stype)*abs(sin(pi*dble(naz)
+     +                                    /180.))/2.
+                                          nbang=nbang+1.*abs(sin(pi*
+     +                                    dble(naz)/180.))/2.
                                         enddo
                                         P_indir=P_indir/nbang
 c computation of the flux reaching the reflecting surface
@@ -1372,36 +1705,39 @@ c
 c **************************************************************************************
 c * computation of the 2nd scattering contributions (2 order scattering and after reflection)
 c **************************************************************************************
-                                        if (effdif.gt.0.D0) then
+                                        if (effdif.gt.0.) then
       nss=0
       ndi=0
+      ncl=0
       do idi=1,ndiff                                                      ! beginning of the loop over the scattering voxels.
         rx_dif=zondif(idi,1)+(rx_s+rx_c)/2.
-        x_dif=idnint(rx_dif/dx)
+        x_dif=nint(rx_dif/dx)
         ry_dif=zondif(idi,2)+(ry_s+ry_c)/2.
-        y_dif=idnint(ry_dif/dy)
+        y_dif=nint(ry_dif/dy)
         z_dif=zondif(idi,3)+(z_s+z_c)/2.
-        id=idnint(rx_dif/dx)
-        if (id.gt.width) id=width
+        id=nint(rx_dif/dx)
+        if (id.gt.nbx) id=nbx
         if (id.lt.1) id=1
-        jd=idnint(ry_dif/dy)
-        if (jd.gt.width) jd=width
+        jd=nint(ry_dif/dy)
+        if (jd.gt.nby) jd=nby
         if (jd.lt.1) jd=1
-        if (z_dif-siz/2..le.altsol(id,jd).or.(z_dif.gt.35000.D0).or.
+        if (z_dif-siz/2..le.altsol(id,jd).or.(z_dif.gt.35000.).or.
      +  (z_dif.gt.cloudbase)) then                                        ! beginning diffusing cell underground
           ndi=ndi+1
+          if ((z_dif-siz/2..gt.altsol(id,jd)).and.(z_dif.le.35000.))
+     +    ncl=ncl+1                                                       ! discarded by the cloud base only
         else
-          ds1=dsqrt((rx_sr-rx_dif)**2.+(ry_sr-ry_dif)**2.+
+          ds1=sqrt((rx_sr-rx_dif)**2.+(ry_sr-ry_dif)**2.+
      +    (z_sr-z_dif)**2.)
-          ds2=dsqrt((rx_c-rx_dif)**2.+(ry_c-ry_dif)**2.+
+          ds2=sqrt((rx_c-rx_dif)**2.+(ry_c-ry_dif)**2.+
      +    (z_c-z_dif)**2.)
-          ds3=dsqrt((rx_s-rx_dif)**2.+(ry_s-ry_dif)**2.+
+          ds3=sqrt((rx_s-rx_dif)**2.+(ry_s-ry_dif)**2.+
      +    (z_s-z_dif)**2.)
           if ((ds1.lt.dss).or.(ds2.lt.dss).or.(ds3.lt.dss)) then
             nss=nss+1
 c       print*,ds1,ds2,ds3,'c',rx_c,ry_c,z_c,'d',rx_dif,ry_dif,z_dif
           else
-            dho=dsqrt((rx_dif-rx_sr)**2.+(ry_dif-ry_sr)**2.)
+            dho=sqrt((rx_dif-rx_sr)**2.+(ry_dif-ry_sr)**2.)
 c computation of the zenithal angle between the reflection surface and the scattering voxel
 c shadow reflection surface-scattering voxel
             call anglezenithal(rx_sr,ry_sr,
@@ -1410,17 +1746,17 @@ c shadow reflection surface-scattering voxel
 c horizon blocking not a matte because dif are closeby and some downward
             hh=1.
 c sub-grid obstacles
-            ff=0.D0
+            ff=0.
             if (dho.gt.drefle(x_sr,y_sr)) then                            ! light path to observer larger than the mean free path -> subgrid obstacles
-              angmin=pi/2.-datan2(obsH(x_sr,y_sr),drefle(x_sr,y_sr))
+              angmin=pi/2.-atan2(obsH(x_sr,y_sr),drefle(x_sr,y_sr))
               if (angzen.lt.angmin) then                                  ! condition obstacle reflechi->scattered
-                ff=0.D0
+                ff=0.
               else
                 ff=ofill(x_sr,y_sr)
               endif
             endif
 c computation of the transmittance between the reflection surface and the scattering voxel
-            distd=dsqrt((rx_dif-rx_sr)**2.+(ry_dif-ry_sr)**2.+
+            distd=sqrt((rx_dif-rx_sr)**2.+(ry_dif-ry_sr)**2.+
      +      (z_dif-z_sr)**2.)
             call transmitm(angzen,z_sr,z_dif,distd,transm,tranam,tabs)
             call transmita(angzen,z_sr,z_dif,distd,haer,transa,tranaa)
@@ -1428,23 +1764,23 @@ c computation of the transmittance between the reflection surface and the scatte
      +      distd,hlay,transl,tranal)
 c computation of the solid angle of the scattering voxel seen from the reflecting surface
             omega=1./distd**2.
-            if (omega.gt.omemax) omega=0.D0
+            if (omega.gt.omemax) omega=0.
 c computing flux reaching the scattering voxel
             fldif2=irefl1*omega*transm*transa*transl*(1.-ff)*hh
 c computing the scattering probability toward the line of sight voxel
 c cell unitaire
-            if (omega.ne.0.D0) then
+            if (omega.ne.0.) then
               call angle3points (rx_sr,ry_sr,z_sr,rx_dif,ry_dif,z_dif,    ! scattering angle.
      +        rx_c,ry_c,z_c,angdif)
               call diffusion(angdif,tranam,tranaa,tranal,un,secdif,       ! scattering probability of the direct light.
      +        secdil,fdifan,fdifl,haer,hlay,pdifd1,z_dif)
             else
-              pdifd1=0.D0
+              pdifd1=0.
             endif
             volu=siz**3.
-            if (volu.lt.0.D0) then
+            if (volu.lt.0.) then
               print*,'ERROR, volume 2 is negative!'
-              stop
+              stop 1
             endif
 c computing scattered intensity toward the line of sight voxel from the scattering voxel
             idif2=fldif2*pdifd1*volu
@@ -1453,16 +1789,16 @@ c computing zenith angle between the scattering voxel and the line of sight voxe
             call angleazimutal(rx_dif,ry_dif,rx_c,ry_c,angazi)            ! computation of the azimutal angle surf refl-scattering voxel
 c subgrid obstacles
             if ((x_dif.lt.1).or.(x_dif.gt.nbx).or.(y_dif.lt.1).or.
-     +      (y_dif.gt.nbx)) then
-              ff=0.D0
+     +      (y_dif.gt.nby)) then
+              ff=0.
             else
               dho=sqrt((rx_dif-rx_c)**2.+(ry_dif-ry_c)**2.)
-              ff=0.D0
+              ff=0.
               if (dho.gt.drefle(x_dif,y_dif)) then                        ! light path to observer larger than the mean free path -> subgrid obstacles
-                angmin=pi/2.-datan2((obsH(x_dif,y_dif)+
+                angmin=pi/2.-atan2((obsH(x_dif,y_dif)+
      +          altsol(x_dif,y_dif)-z_dif),drefle(x_dif,y_dif))
                 if (angzen.lt.angmin) then                                ! condition subgrid obstacle scattering -> line of sight
-                  ff=0.D0
+                  ff=0.
                 else
                   ff=ofill(x_dif,y_dif)
                 endif
@@ -1470,7 +1806,7 @@ c subgrid obstacles
             endif
             hh=1.
 c computing transmittance between the scattering voxel and the line of sight voxel
-            distd=dsqrt((rx_dif-rx_c)**2.+(ry_dif-ry_c)**2.+
+            distd=sqrt((rx_dif-rx_c)**2.+(ry_dif-ry_c)**2.+
      +      (z_dif-z_c)**2.)
             call transmitm(angzen,z_dif,z_c,distd,transm,tranam,tabs)
             call transmita(angzen,z_dif,z_c,distd,haer,transa,tranaa)
@@ -1478,12 +1814,13 @@ c computing transmittance between the scattering voxel and the line of sight vox
      +      distd,hlay,transl,tranal)
 c computing the solid angle of the line of sight voxel as seen from the scattering voxel
             omega=1./distd**2.
-            if (omega.gt.omemax) omega=0.D0
+            if (omega.gt.omemax) omega=0.
 c computation of the scattered flux reaching the line of sight voxel
             fdif2=idif2*omega*transm*transa*transl*(1.-ff)*hh
 c cloud contribution for double scat from a reflecting pixel
+            if (z_dif.lt.cloudbase) then
             if (cloudt.ne.0) then                                         ! line of sight voxel = cloud
-              if (cloudbase-z_c.le.iz*scal) then
+              if (cloudbase-z_c.le.1.20*iz*scal) then
                 call anglezenithal(rx_c,ry_c,z_c,
      +          rx_obs,ry_obs,z_obs,azcl1)                                ! zenith angle from cloud to observer
                 call anglezenithal(rx_c,ry_c,z_c,
@@ -1495,18 +1832,19 @@ c cloud contribution for double scat from a reflecting pixel
                 call cloudreflectance(angzen,                             ! cloud intensity from direct illum
      +          cloudt,rcloud)
                 icloud=icloud+
-     +          fldif2/omega*rcloud*doc2*omefov*
-     +          dabs(dcos(azcl2)/dcos(azcl1))/dsc2/pi
+     +          fdif2/omega*rcloud*doc2*omefov*
+     +          abs(cos(azcl2)/cos(azcl1))/dsc2/pi
               endif
             endif
+            endif
 c computation of the scattering probability of the scattered light toward the observer voxel (exiting voxel_c)
-            if (omega.ne.0.D0) then
+            if (omega.ne.0.) then
               call angle3points(rx_dif,ry_dif,z_dif,rx_c,ry_c,z_c,        ! scattering angle.
      +        rx_obs,ry_obs,z_obs,angdif)
               call diffusion(angdif,tranam,tranaa,tranal,un,secdif,       ! scattering probability of the direct light.
      +        secdil,fdifan,fdifl,haer,hlay,pdifd2,z_c)
             else
-              pdifd2=0.D0
+              pdifd2=0.
             endif
 c computing scattered intensity toward the observer from the line of sight voxel
             idif2p=fdif2*pdifd2
@@ -1525,16 +1863,16 @@ c shadow source-scattering voxel
      +        ry_dif,angazi)
 c horizon blocking not a matter because some path are downward and most of them closeby
               hh=1.
-              angmin=pi/2.-datan2((obsH(x_s,y_s)+
+              angmin=pi/2.-atan2((obsH(x_s,y_s)+
      +        altsol(x_s,y_s)-z_s),drefle(x_s,
      +        y_s))
               if (angzen.lt.angmin) then                                  ! condition obstacle source->scattering.
-                ff=0.D0
+                ff=0.
               else
                 ff=ofill(x_s,y_s)
               endif
 c computation of the transmittance between the source and the scattering voxel
-              distd=dsqrt((rx_s-rx_dif)**2.
+              distd=sqrt((rx_s-rx_dif)**2.
      +        +(ry_s-ry_dif)**2.
      +        +(z_s-z_dif)**2.)
               call transmitm(angzen,z_s,z_dif,
@@ -1545,14 +1883,14 @@ c computation of the transmittance between the source and the scattering voxel
      +        distd,hlay,transl,tranal)
 c computation of the Solid angle of the scattering unit voxel seen from the source
               omega=1./distd**2.
-              if (omega.gt.omemax) omega=0.D0
-              anglez=idnint(180.D0*angzen/pi)+1
+              if (omega.gt.omemax) omega=0.
+              anglez=nint(180.*angzen/pi)+1
               P_dif1=pvalno(anglez,stype)
 c computing flux reaching the scattering voxel
               fldif1=lamplu(x_s,y_s,stype)*P_dif1*
      +        omega*transm*transa*transl*(1.-ff)*hh
 c computing the scattering probability toward the line of sight voxel
-              if (omega.ne.0.D0) then
+              if (omega.ne.0.) then
                 call angle3points (rx_s,ry_s,z_s,                         ! scattering angle.
      +          rx_dif,ry_dif,z_dif,rx_c,ry_c,z_c,
      +          angdif)
@@ -1560,12 +1898,12 @@ c computing the scattering probability toward the line of sight voxel
      +          tranam,tranaa,tranal,un,secdif,secdil,
      +          fdifan,fdifl,haer,hlay,pdifd1,z_dif)
               else
-                pdifd1=0.D0
+                pdifd1=0.
               endif
               volu=siz**3.
-              if (volu.lt.0.D0) then
+              if (volu.lt.0.) then
                 print*,'ERROR, volume 1 is negative!'
-                stop
+                stop 1
               endif
 c computing scattered intensity toward the line of sight voxel from the scattering voxel
               idif1=fldif1*pdifd1*volu
@@ -1576,17 +1914,17 @@ c computing zenith angle between the scattering voxel and the line of sight voxe
      +        rx_c,ry_c,angazi)
 c subgrid obstacles
             if ((x_dif.lt.1).or.(x_dif.gt.nbx).or.(y_dif.lt.1).or.
-     +      (y_dif.gt.nbx)) then
-              dho=dsqrt((rx_dif-rx_c)**2.+(ry_dif-ry_c)**2.)
-              ff=0.D0
+     +      (y_dif.gt.nby)) then
+              dho=sqrt((rx_dif-rx_c)**2.+(ry_dif-ry_c)**2.)
+              ff=0.
                else
-                 ff=0.D0
+                 ff=0.
                  if (dho.gt.drefle(x_dif,y_dif)) then
-                   angmin=pi/2.-datan2((obsH(x_dif,y_dif)
+                   angmin=pi/2.-atan2((obsH(x_dif,y_dif)
      +             +altsol(x_dif,y_dif)-z_dif),drefle(
      +             x_dif,y_dif))
                    if (angzen.lt.angmin) then                             ! condition obstacles scattering->line of sight
-                     ff=0.D0
+                     ff=0.
                    else
                      ff=ofill(x_dif,y_dif)
                    endif
@@ -1594,7 +1932,7 @@ c subgrid obstacles
               endif
               hh=1.
 c Computing transmittance between the scattering voxel and the line of sight voxel
-              distd=dsqrt((rx_c-rx_dif)**2.
+              distd=sqrt((rx_c-rx_dif)**2.
      +        +(ry_c-ry_dif)**2.
      +        +(z_c-z_dif)**2.)
               call transmitm(angzen,z_dif,z_c,
@@ -1605,12 +1943,13 @@ c Computing transmittance between the scattering voxel and the line of sight vox
      +        distd,hlay,transl,tranal)
 c computing the solid angle of the line of sight voxel as seen from the scattering voxel
               omega=1./distd**2.
-              if (omega.gt.omemax) omega=0.D0
+              if (omega.gt.omemax) omega=0.
 c computation of the scattered flux reaching the line of sight voxel
               fldiff=idif1*omega*transm*transa*transl*(1.-ff)*hh
 c cloud contribution to the double scattering from a source
+              if (z_dif.lt.cloudbase) then
               if (cloudt.ne.0) then                                       ! line of sight voxel = cloud
-                if (cloudbase-z_c.le.iz*scal) then
+                if (cloudbase-z_c.le.1.20*iz*scal) then
                   call anglezenithal(rx_c,ry_c,z_c,
      +            rx_obs,ry_obs,z_obs,azcl1)                              ! zenith angle from cloud to observer
                   call anglezenithal(rx_c,ry_c,z_c,
@@ -1623,11 +1962,12 @@ c cloud contribution to the double scattering from a source
      +            cloudt,rcloud)
                   icloud=icloud+
      +            fldiff/omega*rcloud*doc2*omefov*
-     +            dabs(dcos(azcl2)/dcos(azcl1))/dsc2/pi
+     +            abs(cos(azcl2)/cos(azcl1))/dsc2/pi
                 endif
               endif
+              endif
 c computation of the scattering probability of the scattered light toward the observer voxel (exiting voxel_c)
-              if (omega.ne.0.D0) then
+              if (omega.ne.0.) then
                 call angle3points(rx_dif,ry_dif,                          ! scattering angle.
      +          z_dif,rx_c,ry_c,z_c,rx_obs,ry_obs,
      +          z_obs,angdif)
@@ -1635,7 +1975,7 @@ c computation of the scattering probability of the scattered light toward the ob
      +          tranam,tranaa,tranal,un,secdif,secdil,
      +          fdifan,fdifl,haer,hlay,pdifd2,z_c)
               else
-                pdifd2=0.D0
+                pdifd2=0.
               endif
 c computing scattered intensity toward the observer from the line of sight voxel
               idiff2=fldiff*pdifd2
@@ -1646,6 +1986,9 @@ c computing scattered intensity toward the observer from the line of sight voxel
           endif                                                           ! end of the case scattering pos = Source pos or line of sight pos
         endif                                                             ! end diffusing celle underground
       enddo                                                               ! end of the loop over the scattering voxels.
+c every scattering cell was discarded and the cloud base removed the
+c ones above ground: 2nd order scattering is off for this geometry
+      if ((ndi.eq.ndiff).and.(ncl.gt.0)) cldwarn=1
                                         endif                             ! end of the condition ou effdif > 0
 c End of 2nd scattered intensity calculations
 c===================================================================
@@ -1660,19 +2003,20 @@ c verify if there is shadow between sr and line of sight voxel
      +                                  z_sr,rx_c,ry_c,z_c,angzen)
                                         call angleazimutal(rx_sr,ry_sr,   ! computation of the azimutal angle reflect-line of sight
      +                                  rx_c,ry_c,angazi)
-                                        distd=dsqrt((rx_sr-rx_c)**2.
+                                        distd=sqrt((rx_sr-rx_c)**2.
      +                                  +(ry_sr-ry_c)**2.
      +                                  +(z_sr-z_c)**2.)
-                                        dho=dsqrt((rx_sr-rx_c)**2.
+                                        dho=sqrt((rx_sr-rx_c)**2.
      +                                  +(ry_sr-ry_c)**2.)
                                         if (angzen.gt.pi/4.) then         ! 45deg. it is unlikely to have a 1km high mountain less than 1
-        call horizon(x_sr,y_sr,z_sr,dx,dy,altsol,angazi,zhoriz,dh)
+        call horizon(x_sr,y_sr,z_sr,dx,dy,nbx,nby,altsol,angazi,zhoriz,
+     +  dh)
                                           if (dh.le.dho) then
                                             if (angzen-zhoriz.lt.
      +                                      0.00001) then                 ! the path line of sight-reflec is not below the horizon => we compute
                                               hh=1.
                                             else
-                                              hh=0.D0
+                                              hh=0.
                                             endif                         ! end condition reflecting surf. above horizon
                                           else
                                             hh=1.
@@ -1684,18 +2028,18 @@ c verify if there is shadow between sr and line of sight voxel
 c case: line of sight position = Position of reflecting cell
                                         if((rx_c.eq.rx_sr).and.(ry_c.eq.
      +                                  ry_sr).and.(z_c.eq.z_sr)) then
-                                          intind=0.D0
+                                          intind=0.
                                         else
 c obstacle
-                                         dho=dsqrt((rx_sr-rx_c)**2.
+                                         dho=sqrt((rx_sr-rx_c)**2.
      +                                   +(ry_sr-ry_c)**2.)
-                                         ff=0.D0
+                                         ff=0.
                                          if (dho.gt.drefle(x_sr,y_sr))
      +                                   then
-                                           angmin=pi/2.-datan2(obsH(x_sr
+                                           angmin=pi/2.-atan2(obsH(x_sr
      +                                     ,y_sr),drefle(x_sr,y_sr))
                                            if (angzen.lt.angmin) then     ! condition obstacle reflected.
-                                             ff=0.D0
+                                             ff=0.
                                            else
                                              ff=ofill(x_sr,y_sr)
                                            endif
@@ -1709,14 +2053,13 @@ c computation of the transmittance between the ground surface and the line of si
      +                                    z_c,distd,hlay,transl,tranal)
 c computation of the solid angle of the line of sight voxel seen from the reflecting cell
                                           omega=1./distd**2.
-                                          if (omega.gt.omemax) 
-     +                                    omega=0.D0
+                                          if (omega.gt.omemax) omega=0.
 c computation of the flux reflected reaching the line of sight voxel
                                           flindi=irefl*omega*transm*
      +                                    transa*transl*(1.-ff)*hh        ! obstacles correction
 c cloud contribution to the reflected light from a ground pixel
                               if (cloudt.ne.0) then                       ! line of sight voxel = cloud
-                                if (cloudbase-z_c.le.iz*scal) then
+                                if (cloudbase-z_c.le.1.20*iz*scal) then
                                   call anglezenithal(rx_c,ry_c,z_c,
      +                            rx_obs,ry_obs,z_obs,azcl1)              ! zenith angle from cloud to observer
                                   call anglezenithal(rx_c,ry_c,z_c,
@@ -1729,11 +2072,11 @@ c cloud contribution to the reflected light from a ground pixel
      +                            cloudt,rcloud)
                                   icloud=icloud+
      +                            flindi/omega*rcloud*doc2*omefov*
-     +                            dabs(dcos(azcl2)/dcos(azcl1))/dsc2/pi
+     +                            abs(cos(azcl2)/cos(azcl1))/dsc2/pi
                                 endif
                               endif
 c computation of the scattering probability of the reflected light
-                                          if (omega.ne.0.D0) then
+                                          if (omega.ne.0.) then
                                             call angle3points(rx_sr,      ! scattering angle.
      +                                      ry_sr,z_sr,rx_c,ry_c,z_c,
      +                                      rx_obs,ry_obs,z_obs,angdif)
@@ -1742,7 +2085,7 @@ c computation of the scattering probability of the reflected light
      +                                      secdif,secdil,fdifan,fdifl,
      +                                      haer,hlay,pdifin,z_c)
                                           else
-                                            pdifin=0.D0
+                                            pdifin=0.
                                           endif
 c computation of the reflected intensity toward the sensor by a reflecting cell
                                           intind=flindi*pdifin*(1.-ff)
@@ -1765,12 +2108,12 @@ c refl->1st scat->2nd scat
                             isourc=isourc*scal                            ! scaling the values according to the path length in the l. of sight voxel of 1m3
                             isourc=isourc*portio                          ! correct for the field of view of the observer
 c include clouds in the total intensity
-                            isourc=isourc+icloud
+c                            isourc=isourc+icloud
 
 
-        if ((itodif.lt.0.D0).or.(itotrd.lt.0.D0)) then
+        if ((itodif.lt.0.).or.(itotrd.lt.0.)) then
           print*,intdir,itotind,itodif,itotrd
-          stop
+          stop 1
         endif
 
 
@@ -1781,9 +2124,9 @@ c include clouds in the total intensity
        print*,' source->reflexion->scattering=',itotind
        print*,' source->scattering->scattering=',itodif
        print*,' source->reflexion->scattering->scattering=',itotrd
-       if (intdir*itotind*itodif*itotrd.lt.0.D0) then
+       if (intdir*itotind*itodif*itotrd.lt.0.) then
          print*,'PROBLEM! Negative intensity.'
-         stop
+         stop 1
        endif
                             endif
 c**********************************************************************
@@ -1794,10 +2137,11 @@ c**********************************************************************
                         endif                                             ! end of the condition "the luminosity of the ground pixel x_s,y_s in not null".
                       enddo                                               ! end the loop over the lines (latitude) of the domain (y_s).
                     enddo                                                 ! end the loop over the column (longitude) of the domain (x_s).
+!$omp end parallel do
 c end of the computation of the intensity of one source type
                     itotci=itotci+itotty                                  ! Sum of the intensities all source all type to a line of sight element
-                    do x_s=1,nbx
-                      do y_s=1,nby
+                    do x_s=imin(stype),imax(stype)
+                      do y_s=jmin(stype),jmax(stype)
                         ITC(x_s,y_s)=ITC(x_s,y_s)+ITT(x_s,y_s,stype)
                       enddo
                     enddo
@@ -1839,9 +2183,9 @@ c computation of the flux reaching the objective of the telescope from the line 
      +              transl
                   enddo
                 enddo
-                if (dcos(pi-angzen).eq.0.D0) then
+                if (cos(pi-angzen).eq.0.) then
                   print*,'ERROR perfectly horizontal sight is forbidden'
-                  stop
+                  stop 1
                 endif
 c end of the computation of the flux reaching the observer voxel from the line of sight voxel
                 ftocap=ftocap+fcapt                                       ! flux for all source all type all line of sight element
@@ -1855,8 +2199,7 @@ c end of the computation of the flux reaching the observer voxel from the line o
 c correction for the FOV to the flux reaching the intrument from the cloud voxel
             if (cloudt.ne.0) then
 c computation of the flux reaching the intrument from the cloud voxel
-                fccld=icloud*ometif*transa*transm*transl
-                fctcld=fctcld+fccld                                       ! cloud flux for all source all type all line of sight element
+                fctcld=icloud*ometif*transa*transm*transl               ! cloud flux for all source all type all line of sight element
             endif
             if (verbose.ge.1) print*,'Added radiance =',
      +      fcapt/omefov/(pi*(diamobj/2.)**2.)
@@ -1870,13 +2213,21 @@ c computation of the flux reaching the intrument from the cloud voxel
           endif                                                           ! end condition line of sight voxel 1/stoplim
 c accelerate the computation as we get away from the sources
           scalo=scal
-          if (scal.le.3000.D0)  scal=scal*1.12
+          if (scal.le.3000.)  scal=scal*1.12
           endif
         else
 c           print*,'End of line of sight - touching the ground'
         endif                                                             ! line of sight not blocked by topography
         enddo                                                             ! end of the loop over the line of sight voxels.
-        fctcld=fctcld*10**(0.4*(100.D0-cloudfrac)*cloudslope)               ! correction for the cloud fraction (defined from 0 to 100)
+        fctcld=fctcld*10**(0.4*(100.-cloudfrac)*cloudslope)               ! correction for the cloud fraction (defined from 0 to 100)
+        if (cldwarn.eq.1) then
+          print*,'WARNING: the second-order scattering volume lies',
+     +    ' entirely above the cloud base',cloudbase,' m: second',
+     +    ' order scattering is off for this pointing.'
+          write(2,*) 'WARNING: the second-order scattering volume lies',
+     +    ' entirely above the cloud base',cloudbase,' m: second',
+     +    ' order scattering is off for this pointing.'
+        endif
         if (prmaps.eq.1) then
 c          open(unit=9,file=pclf,status='unknown')
             do x_s=1,nbx
@@ -1939,8 +2290,177 @@ c =================================
         write(2,*) '         Diffuse radiance (W/str/m**2/nm)          '
         write(2,2001) (ftocap+fctcld)/omefov/(pi*(diamobj/2.)**2.)
       close(2)
- 2001 format('                   ',E10.3E2)
+c machine-readable result record of this pointing (<root>_result.txt or
+c <root>_e<elev>_a<azim>_result.txt) and the combined record (unit 4)
+      open(unit=3,file=resfile,status='unknown')
+        write(3,2002) 'elevation_deg',angvis
+        write(3,2002) 'azimuth_deg',azimgeo
+        write(3,2002) 'wavelength_nm',lambda
+        write(3,2002) 'direct_irradiance_sources',irdirect
+        write(3,2002) 'direct_irradiance_reflection',irrdirect
+        write(3,2002) 'direct_radiance_sources',direct
+        write(3,2002) 'direct_radiance_reflection',rdirect
+        write(3,2002) 'cloud_radiance',
+     +  fctcld/omefov/(pi*(diamobj/2.)**2.)
+        write(3,2002) 'diffuse_radiance',
+     +  (ftocap+fctcld)/omefov/(pi*(diamobj/2.)**2.)
+      close(3)
+        if (ipt.gt.1) write(4,*)
+        write(4,2002) 'elevation_deg',angvis
+        write(4,2002) 'azimuth_deg',azimgeo
+        write(4,2002) 'wavelength_nm',lambda
+        write(4,2002) 'direct_irradiance_sources',irdirect
+        write(4,2002) 'direct_irradiance_reflection',irrdirect
+        write(4,2002) 'direct_radiance_sources',direct
+        write(4,2002) 'direct_radiance_reflection',rdirect
+        write(4,2002) 'cloud_radiance',
+     +  fctcld/omefov/(pi*(diamobj/2.)**2.)
+        write(4,2002) 'diffuse_radiance',
+     +  (ftocap+fctcld)/omefov/(pi*(diamobj/2.)**2.)
+      enddo                                                               ! end of the loop over the pointings
+      close(4)
+ 2002 format(A,'=',ES14.6E2)
+ 2001 format('                   ',E14.7E2)
       stop
+      end
+c***********************************************************************
+c     chknam: stop when a file name built by the kernel does not fit
+c     in the character variable that must hold it. Writing a truncated
+c     name would silently overwrite another product file.
+c***********************************************************************
+      subroutine chknam(vname,need,maxlen)
+      implicit none
+      character*(*) vname
+      integer need,maxlen
+      if (need.gt.maxlen) then
+        print*,'Error: file name too long for variable ',vname,
+     +  ': need',need,' characters, limit',maxlen
+        stop 1
+      endif
+      return
+      end
+c***********************************************************************
+c     discfrac: fraction of the area of the ground cell centred on
+c     (xc,yc), of size dx by dy, that lies inside the disc of radius r
+c     centred on (xs,ys). Exact (analytic) result, so the sum over the
+c     cells of the reflection box is pi*r**2 for every cell size.
+c***********************************************************************
+      subroutine discfrac(xc,yc,xs,ys,dx,dy,r,frac)
+      implicit none
+      real*8 xc,yc,xs,ys,dx,dy,r,frac
+      real*8 xa,xb,ya,yb,area,rr
+      real*8 dqarea
+      rr=dble(r)
+      xa=dble(xc)-dble(dx)/2.d0-dble(xs)
+      xb=dble(xc)+dble(dx)/2.d0-dble(xs)
+      ya=dble(yc)-dble(dy)/2.d0-dble(ys)
+      yb=dble(yc)+dble(dy)/2.d0-dble(ys)
+      area=dqarea(xb,yb,rr)-dqarea(xa,yb,rr)-dqarea(xb,ya,rr)
+     ++dqarea(xa,ya,rr)
+      frac=dble(area/(dble(dx)*dble(dy)))
+      if (frac.lt.0.) frac=0.
+      if (frac.gt.1.) frac=1.
+      return
+      end
+c***********************************************************************
+c     dqarea: signed area of the intersection of the disc of radius r
+c     centred on the origin with the rectangle that has the origin and
+c     (x,y) as opposite corners.
+c***********************************************************************
+      real*8 function dqarea(x,y,r)
+      implicit none
+      real*8 x,y,r,w,h,x1,b,sgn,fa,fb
+      w=abs(x)
+      h=abs(y)
+      sgn=1.d0
+      if (x.lt.0.d0) sgn=-sgn
+      if (y.lt.0.d0) sgn=-sgn
+      if ((w.eq.0.d0).or.(h.eq.0.d0).or.(r.le.0.d0)) then
+        dqarea=0.d0
+        return
+      endif
+      if (w*w+h*h.le.r*r) then
+        dqarea=sgn*w*h
+        return
+      endif
+c the rectangle [0,w]x[0,h] crosses the circle. Along x the integrand
+c min(h,sqrt(r**2-x**2)) equals h up to x1 and the arc beyond it.
+      b=min(w,r)
+      if (h.ge.r) then
+        x1=0.d0
+      else
+        x1=sqrt(r*r-h*h)
+      endif
+      if (x1.gt.b) x1=b
+      fa=(x1*sqrt(max(r*r-x1*x1,0.d0))+r*r*asin(min(x1/r,1.d0)))/2.d0
+      fb=(b*sqrt(max(r*r-b*b,0.d0))+r*r*asin(min(b/r,1.d0)))/2.d0
+      dqarea=sgn*(h*x1+fb-fa)
+      return
+      end
+c***********************************************************************
+c     angline: classify one line of the angles list file.
+c     lkind=0 blank or comment line, lkind=1 valid pointing (elev,azi
+c     set), lkind=2 line that cannot be parsed.
+c***********************************************************************
+      subroutine angline(aline,lkind,elev,azi)
+      implicit none
+      character*(*) aline
+      integer lkind
+      real*8 elev,azi
+      character(200) buf
+      integer ios,l
+      buf=aline
+      l=len_trim(buf)
+      if (l.gt.0) then
+        if (buf(l:l).eq.char(13)) buf(l:l)=' '
+      endif
+      buf=adjustl(buf)
+      if (len_trim(buf).eq.0) then
+        lkind=0
+      elseif (buf(1:1).eq.'#') then
+        lkind=0
+      else
+        read(buf,*,iostat=ios) elev,azi
+        if (ios.ne.0) then
+          lkind=2
+        else
+          lkind=1
+        endif
+      endif
+      return
+      end
+c***********************************************************************
+c     angtag: format an angle for a file name. F0.1, then '.' -> 'p',
+c     a leading '-' -> 'm', a leading '.' -> '0.' (gfortran prints
+c     0.0 as .0). Example: -5.0 -> m5p0, 350.0 -> 350p0, 0.0 -> 0p0.
+c***********************************************************************
+      subroutine angtag(val,tag,ltag)
+      implicit none
+      real*8 val
+      character*(*) tag
+      integer ltag
+      character(32) buf,buf2
+      integer i,l
+      write(buf,'(F0.1)') val
+      buf=adjustl(buf)
+      tag=' '
+      ltag=0
+      if (buf(1:1).eq.'-') then
+        tag(1:1)='m'
+        ltag=1
+        buf=buf(2:)
+      endif
+      if (buf(1:1).eq.'.') then
+        buf2=buf
+        buf='0'//buf2(1:31)
+      endif
+      l=len_trim(buf)
+      do i=1,l
+        if (buf(i:i).eq.'.') buf(i:i)='p'
+      enddo
+      tag(ltag+1:ltag+l)=buf(1:l)
+      ltag=ltag+l
+      return
       end
 c***********************************************************************************************************************
 c*                                                                                                                     *

@@ -43,7 +43,7 @@ c
       endif
       if ((angzen.lt.0.).or.(angzen.gt.pi)) then
         print*,'ERREUR angzen2=',angzen
-        stop
+        stop 1
       endif
       return
       end 

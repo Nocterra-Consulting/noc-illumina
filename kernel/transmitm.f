@@ -57,7 +57,7 @@ c
       if ((transm.lt.0.).or.(transm.gt.1.)) then
         print*,'ERREUR avec transm',transm,tranam,
      +  z_f,z_i,distd,angz
-        stop
+        stop 1
       endif
       return
       end

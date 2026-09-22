@@ -50,7 +50,7 @@ c
         endif
         if ((angazi.lt.0.).or.(angazi.gt.2.*pi)) then
           print*,'ERREUR angazi=',angazi,x1,y2,x2,y2
-          stop
+          stop 1
         endif
       endif
       return
