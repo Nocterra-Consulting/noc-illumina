@@ -8,6 +8,7 @@ when that library is absent.
 """
 
 import os
+import subprocess
 
 import numpy as np
 import pytest
@@ -352,3 +353,23 @@ def test_the_same_luminaire_reads_the_same_from_ies_and_ldt():
     peak = a > 0.01 * a.max()
     assert np.max(np.abs(b[peak] - a[peak]) / a[peak]) < 0.01
     assert np.sum(b) == pytest.approx(np.sum(a), rel=0.01)
+
+
+# ---------------------------------------------------- one reader, not two
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def test_the_repository_holds_one_copy_of_the_reader():
+    """A second copy beside the notebook would drift away from this one."""
+    tracked = subprocess.run(
+        ["git", "-C", REPO, "ls-files", "notebooks/AngularPowerDistribution.py"],
+        capture_output=True,
+        text=True,
+    )
+    if tracked.returncode:
+        pytest.skip("git cannot read this checkout")
+    assert tracked.stdout.strip() == "", (
+        "notebooks/AngularPowerDistribution.py is tracked again. "
+        "Generate the bundle with `illum photometry-notebook` instead."
+    )

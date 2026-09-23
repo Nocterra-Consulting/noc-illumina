@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
+import hashlib
 import os
+import shutil
 import warnings
 
 import click
@@ -66,3 +68,39 @@ def photometry(filenames, outdir=".", fmt="%.9e"):
     if failed:
         click.echo(f"{failed} of {len(filenames)} files failed.", err=True)
         raise SystemExit(1)
+
+
+NOTEBOOK = "photometry_inspection.ipynb"
+READER = "AngularPowerDistribution.py"
+
+
+@click.command(name="photometry-notebook")
+@click.argument("outdir", type=click.Path(file_okay=False))
+def CLI_photometry_notebook(outdir):
+    """Write the standalone photometry inspection notebook.
+
+    OUTDIR receives the notebook and a copy of the reader it needs. The pair
+    then runs on a plain Python install, away from this checkout. Run this
+    command again after every change to the reader, so the copy never drifts.
+    """
+    photometry_notebook(outdir)
+
+
+def photometry_notebook(outdir):
+    package = os.path.dirname(os.path.abspath(__file__))
+    sources = {
+        NOTEBOOK: os.path.join(os.path.dirname(package), "notebooks", NOTEBOOK),
+        READER: os.path.join(package, READER),
+    }
+    for name, path in sources.items():
+        if not os.path.isfile(path):
+            raise click.ClickException(f"{path}: this copy of illum holds no {name}.")
+
+    os.makedirs(outdir, exist_ok=True)
+    for name, path in sources.items():
+        shutil.copyfile(path, os.path.join(outdir, name))
+        click.echo(f"wrote {os.path.join(outdir, name)}")
+
+    with open(sources[READER], "rb") as f:
+        digest = hashlib.sha256(f.read()).hexdigest()
+    click.echo(f"reader sha256 {digest}")
