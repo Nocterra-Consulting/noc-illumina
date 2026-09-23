@@ -297,6 +297,25 @@ needs_corpus = pytest.mark.skipif(
 )
 
 
+# Files whose candela block disagrees with the flux their own header declares.
+# The reader is right and the file is wrong, so the mismatch is recorded here
+# rather than hidden. Remove an entry if a file ever starts to agree.
+DECLARED_FLUX_IS_WRONG = {
+    # Type B. A quadrature in the native B and V angles, which uses none of
+    # the type C conversion, lands on the same integral to within 0.04 percent.
+    "dlk2-60-amb-bw1-mp.ies": 1.281,
+    "dlk2-60-cwt-bw1-mp.ies": 1.281,
+    "dlk2-60-wwt-bw1-mp.ies": 1.281,
+    "dlk2-60-amb-bw3-mp.ies": 1.087,
+    "dlk2-60-cwt-bw3-mp.ies": 1.087,
+    "dlk2-60-wwt-bw3-mp.ies": 1.087,
+    # The IES export stores one C-plane, but the EULUMDAT file for the same
+    # luminaire stores 24 real planes and it agrees with its own header.
+    "fl70 27000 nb 60.ies": 1.115,
+    "fl70 27000 mb 80.ies": 1.042,
+}
+
+
 @needs_corpus
 @pytest.mark.parametrize("filename", CORPUS, ids=os.path.basename)
 def test_every_corpus_file_parses_or_names_itself(filename):
@@ -308,8 +327,14 @@ def test_every_corpus_file_parses_or_names_itself(filename):
 
     total = flux(apd)
     assert np.isfinite(total) and total > 0
-    if apd.lumens > 0:
+    if apd.lumens <= 0:
+        return
+
+    known = DECLARED_FLUX_IS_WRONG.get(os.path.basename(filename).lower())
+    if known is None:
         assert total == pytest.approx(apd.lumens, rel=0.01)
+    else:
+        assert total / apd.lumens == pytest.approx(known, rel=0.01)
 
 
 @pytest.mark.skipif(
