@@ -61,6 +61,8 @@ functions = (
     (".extract", "CLI_extract"),
     (".init", "CLI_init"),
     (".inputs", "CLI_inputs"),
+    (".photometry", "CLI_photometry"),
+    (".photometry", "CLI_photometry_notebook"),
     (".warp", "CLI_warp"),
 )
 
