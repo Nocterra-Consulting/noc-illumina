@@ -3,7 +3,7 @@ c read a real array from an unformatted binary file
 c nbx,nby are inputs: the domain size taken from the topography file
 c (see twodsize). The file header must have the same size.
        integer nbx,nby,i,j,nbxf,nbyf
-       real bindata(nbx,nby)
+       real bindata(512,512)                                              ! legacy: main's layout
        character*(*) filename
        open(unit=1,form='unformatted',file=filename,action='read')
          read(1) nbxf,nbyf

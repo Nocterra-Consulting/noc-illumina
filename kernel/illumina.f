@@ -106,6 +106,8 @@ c
       character(maxnam) basenm                                            ! Base name of files
       integer lenbase                                                     ! Length of the Base name of the experiment
       real lambda,pressi                                                  ! Wavelength (nanometer), atmospheric pressure (kPa)
+      integer width                                                       ! legacy: main's fixed domain width
+      parameter (width=512)
       real, allocatable :: drefle(:,:)                                    ! mean free path to the ground (meter).
       real reflsiz                                                        ! Size of the reflecting surface
       integer ntype                                                       ! Number of light source types or zones considered
@@ -460,12 +462,39 @@ c read the domain size from the topography header and allocate the
 c domain arrays to the actual size (no more fixed 512 x 512 padding)
       call twodsize(mnaf,nbx,nby)
       if (verbose.ge.1) print*,'Domain size (nbx,nby) = ',nbx,nby
-      allocate(drefle(nbx,nby),val2d(nbx,nby),altsol(nbx,nby))
-      allocate(lampal(nbx,nby),inclix(nbx,nby),incliy(nbx,nby))
-      allocate(obsH(nbx,nby),ofill(nbx,nby),ITC(nbx,nby),FTC(nbx,nby))
-      allocate(FCA(nbx,nby),lpluto(nbx,nby),flcld(nbx,nby))
-      allocate(viirs(nbx,nby))
-      allocate(lamplu(nbx,nby,ntype),ITT(nbx,nby,ntype))
+c legacy: main's fixed 512 x 512 layout, zero filled, so every index
+c main could reach (past the domain edge, or wrapping a column) reads
+c the same cell as on main. Domains above 512 cells are refused, as on main.
+      if ((nbx.gt.width).or.(nby.gt.width)) then
+        print*,'Error: the legacy kernel takes domains up to ',width,
+     +  ' cells; got ',nbx,'x',nby
+        stop 1
+      endif
+      allocate(drefle(width,width),val2d(width,width))
+      allocate(altsol(width,width))
+      allocate(lampal(width,width),inclix(width,width))
+      allocate(incliy(width,width))
+      allocate(obsH(width,width),ofill(width,width),ITC(width,width))
+      allocate(FTC(width,width))
+      allocate(FCA(width,width),lpluto(width,width),flcld(width,width))
+      allocate(viirs(width,width))
+      allocate(lamplu(width,width,ntype),ITT(width,width,ntype))
+      drefle=0.
+      val2d=0.
+      altsol=0.
+      lampal=0.
+      inclix=0.
+      incliy=0.
+      obsH=0.
+      ofill=0.
+      ITC=0.
+      FTC=0.
+      FCA=0.
+      lpluto=0.
+      flcld=0.
+      viirs=0
+      lamplu=0.
+      ITT=0.
       if ((x_obs.lt.1).or.(x_obs.gt.nbx).or.(y_obs.lt.1).or.
      +(y_obs.gt.nby)) then
         print*,'Error: observer position outside the domain',x_obs,
@@ -1292,10 +1321,10 @@ c temporaire !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      +    0.00001))) then
           x_c=nint(rx_c/dx)
           if (x_c.lt.1) x_c=1
-          if (x_c.gt.nbx) x_c=nbx
+          if (x_c.gt.width) x_c=width
           y_c=nint(ry_c/dy)
           if (y_c.lt.1) y_c=1
-          if (y_c.gt.nby) y_c=nby
+          if (y_c.gt.width) y_c=width
           z_c=z_c+iz*(scalo/2.+scal/2.)
           if (z_c.gt.altsol(x_c,y_c)) then
           if ((fcapt.ge.ftocap/stoplim).and.(z_c.lt.cloudbase).and.       ! stop the calculation of the viewing line when the increment is lower than 1/stoplim
@@ -1673,10 +1702,10 @@ c ******************************************************************************
         y_dif=nint(ry_dif/dy)
         z_dif=zondif(idi,3)+(z_s+z_c)/2.
         id=nint(rx_dif/dx)
-        if (id.gt.nbx) id=nbx
+        if (id.gt.width) id=width
         if (id.lt.1) id=1
         jd=nint(ry_dif/dy)
-        if (jd.gt.nby) jd=nby
+        if (jd.gt.width) jd=width
         if (jd.lt.1) jd=1
         if (z_dif-siz/2..le.altsol(id,jd).or.(z_dif.gt.35000.).or.
      +  (z_dif.gt.cloudbase)) then                                        ! beginning diffusing cell underground
@@ -1744,7 +1773,7 @@ c computing zenith angle between the scattering voxel and the line of sight voxe
             call angleazimutal(rx_dif,ry_dif,rx_c,ry_c,angazi)            ! computation of the azimutal angle surf refl-scattering voxel
 c subgrid obstacles
             if ((x_dif.lt.1).or.(x_dif.gt.nbx).or.(y_dif.lt.1).or.
-     +      (y_dif.gt.nby)) then
+     +      (y_dif.gt.nbx)) then
               ff=0.
             else
               dho=sqrt((rx_dif-rx_c)**2.+(ry_dif-ry_c)**2.)
@@ -1867,7 +1896,7 @@ c computing zenith angle between the scattering voxel and the line of sight voxe
      +        rx_c,ry_c,angazi)
 c subgrid obstacles
             if ((x_dif.lt.1).or.(x_dif.gt.nbx).or.(y_dif.lt.1).or.
-     +      (y_dif.gt.nby)) then
+     +      (y_dif.gt.nbx)) then
               dho=sqrt((rx_dif-rx_c)**2.+(ry_dif-ry_c)**2.)
               ff=0.
                else
