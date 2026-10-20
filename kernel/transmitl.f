@@ -38,6 +38,10 @@ c
       real angz,hlay
       real z_i,z_f,z1,z2
       real distd
+      real lgtal,k_lgtal
+      save lgtal,k_lgtal
+!$omp threadprivate(lgtal,k_lgtal)
+      data k_lgtal /-1./
 
 
       if (z_i.gt.z_f) then
@@ -47,11 +51,17 @@ c
         z1=z_i
         z2=z_f
       endif
+c lgtal = log(tranal), cached: the argument is constant for a run, and
+c log of the same argument gives the same value (results unchanged)
+      if (tranal.ne.k_lgtal) then
+        lgtal=log(tranal)
+        k_lgtal=tranal
+      endif
       if (z1.ne.z2) then    
-        transl=exp((log(tranal)/abs(cos(angz)))*(exp(-1.*z1/hlay)-
+        transl=exp((lgtal/abs(cos(angz)))*(exp(-1.*z1/hlay)-
      +  exp(-1.*z2/hlay)))
       else
-        transl=exp((log(tranal))*exp(-1.*z1/hlay)*distd/hlay)  
+        transl=exp((lgtal)*exp(-1.*z1/hlay)*distd/hlay)  
       endif
          if (transl.eq.0.) then
             print*,'ERREUR transl - no transmission',z_i,z_f,angz

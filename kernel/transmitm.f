@@ -39,6 +39,10 @@ c
       real angz
       real distd
       real z_i,z_f,z1,z2
+      real lgtma,k_lgtma
+      save lgtma,k_lgtma
+!$omp threadprivate(lgtma,k_lgtma)
+      data k_lgtma /-1./
       if (z_i.gt.z_f) then
         z2=z_i
         z1=z_f
@@ -46,11 +50,17 @@ c
         z1=z_i
         z2=z_f
       endif
+c lgtma = log(tranam*tabs), cached: the argument is constant for a run, and
+c log of the same argument gives the same value (results unchanged)
+      if (tranam*tabs.ne.k_lgtma) then
+        lgtma=log(tranam*tabs)
+        k_lgtma=tranam*tabs
+      endif
       if (z1.ne.z2) then    
-        transm=exp((log(tranam*tabs)/abs(cos(angz)))*(exp(-1.*z1/8000.)-
+        transm=exp((lgtma/abs(cos(angz)))*(exp(-1.*z1/8000.)-
      +  exp(-1.*z2/8000.)))
       else
-        transm=exp((log(tranam*tabs))*exp(-1.*z1/8000.)*distd/8000.)  
+        transm=exp((lgtma)*exp(-1.*z1/8000.)*distd/8000.)  
       endif
       if (distd.eq.0.) transm=1.
       if ((transm.lt.0.).or.(transm.gt.1.)) then

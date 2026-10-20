@@ -40,6 +40,10 @@ c
       real angz,haer
       real z_i,z_f,z1,z2
       real distd
+      real lgtaa,k_lgtaa
+      save lgtaa,k_lgtaa
+!$omp threadprivate(lgtaa,k_lgtaa)
+      data k_lgtaa /-1./
 
 
       if (z_i.gt.z_f) then
@@ -49,11 +53,17 @@ c
         z1=z_i
         z2=z_f
       endif
+c lgtaa = log(tranaa), cached: the argument is constant for a run, and
+c log of the same argument gives the same value (results unchanged)
+      if (tranaa.ne.k_lgtaa) then
+        lgtaa=log(tranaa)
+        k_lgtaa=tranaa
+      endif
       if (z1.ne.z2) then    
-        transa=exp((log(tranaa)/abs(cos(angz)))*(exp(-1.*z1/haer)-
+        transa=exp((lgtaa/abs(cos(angz)))*(exp(-1.*z1/haer)-
      +  exp(-1.*z2/haer)))
       else
-        transa=exp((log(tranaa))*exp(-1.*z1/haer)*distd/haer)  
+        transa=exp((lgtaa)*exp(-1.*z1/haer)*distd/haer)  
       endif
       if (distd.eq.0.) transa=1.
          if (transa.eq.0.) then

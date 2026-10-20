@@ -38,6 +38,10 @@ c
       real angdeg,tranam,tranaa,tranal
       real altit,un,hlay,haer
       integer rang,na,naz
+      real lgaa,k_lgaa,lgal,k_lgal,lgam,k_lgam
+      save lgaa,k_lgaa,lgal,k_lgal,lgam,k_lgam
+!$omp threadprivate(lgaa,k_lgaa,lgal,k_lgal,lgam,k_lgam)
+      data k_lgaa,k_lgal,k_lgam /-1.,-1.,-1./
       parameter (pi=3.1415926)
 c--------------------------------------------------------      
       if (angdif.lt.0.) angdif=-angdif      
@@ -55,20 +59,38 @@ c  497(3), 2501-2516.
 c---------------------------------------- 
       if ((tranaa.le.1.).and.(tranaa.gt.0.)) then
          fonc_ae=fonc_a(rang)                                             ! value of the aerosol phase function
-         prob_a=(1.-exp(log(tranaa)*exp(-1.*altit/haer)*un/haer))*        ! Functions are normalized in the main code. See their division by 4pi
+c lgaa = log(tranaa), cached: the argument is constant for a run, and
+c log of the same argument gives the same value (results unchanged)
+         if (tranaa.ne.k_lgaa) then
+           lgaa=log(tranaa)
+           k_lgaa=tranaa
+         endif
+         prob_a=(1.-exp(lgaa*exp(-1.*altit/haer)*un/haer))*        ! Functions are normalized in the main code. See their division by 4pi
      +   secdif*fonc_ae
       else
          prob_a=0.
       endif      
       if ((tranal.le.1.).and.(tranal.gt.0.)) then
          fonc_le=fonc_l(rang)                                             ! value of the layer phase function
-         prob_l=(1.-exp(log(tranal)*exp(-1.*altit/hlay)*un/hlay))*           
+c lgal = log(tranal), cached: the argument is constant for a run, and
+c log of the same argument gives the same value (results unchanged)
+         if (tranal.ne.k_lgal) then
+           lgal=log(tranal)
+           k_lgal=tranal
+         endif
+         prob_l=(1.-exp(lgal*exp(-1.*altit/hlay)*un/hlay))*           
      +   secdil*fonc_le
       else
          prob_l=0.
       endif
       fctmol=0.75*(1.+((cos(angdif))**2.))/(4.*pi)                        ! value of the molecule phase function
-      prob_m=(1.-exp(log(tranam)*exp(-1.*altit/8000.)*un/8000.))*
+c lgam = log(tranam), cached: the argument is constant for a run, and
+c log of the same argument gives the same value (results unchanged)
+      if (tranam.ne.k_lgam) then
+        lgam=log(tranam)
+        k_lgam=tranam
+      endif
+      prob_m=(1.-exp(lgam*exp(-1.*altit/8000.)*un/8000.))*
      +fctmol
 
       pdif = prob_a+prob_m+prob_l                                         ! This is an approximation valide if 1-transa,
