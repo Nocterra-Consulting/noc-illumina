@@ -33,9 +33,10 @@ The check compares:
 
 ## Kernel command line
 
-The kernel accepts four optional positional arguments:
+The kernel accepts three optional positional arguments and, after the
+angles file, optional keywords in any order:
 
-    illumina [PARFILE [OUTFILE [ANGLES_FILE [maps|nomaps]]]]
+    illumina [PARFILE [OUTFILE [ANGLES_FILE [maps|nomaps] [nolog]]]]
 
 - `PARFILE`: the parameter file (default `illumina.in`).
 - `OUTFILE`: the output file name (default `<basenm>.out`, where
@@ -56,6 +57,12 @@ The kernel accepts four optional positional arguments:
   run with a message. The regression harness runs with the default, so
   the references hold the maps; `run_angles.py` checks that `nomaps`
   gives the same `_result.txt` files and no `_pcl.bin`.
+- `nolog`: write only the combined `<root>_results.txt`: no per-pointing
+  `.out` log (about 14 KB per pointing) or `_result.txt`, and no
+  per-voxel printout (about 13 KB of standard output per pointing). The
+  results are the same. Meant for many-pointing runs on a shared file
+  system (NALMP angle_loop); `run_angles.py` checks that `nomaps nolog`
+  gives the same `_results.txt` and no per-pointing file.
 
 All arguments are copied as is, so a path with `/`, a space or a
 comma works. The kernel prints the resolved file names and the number

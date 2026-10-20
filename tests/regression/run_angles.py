@@ -20,7 +20,10 @@ gives the same results as separate single-pointing processes:
 6. the wall times of the three single runs and of the looped run are
    printed;
 7. one more looped run with the fourth argument ``nomaps`` must give
-   byte-identical ``_result.txt`` files and no ``_pcl.bin`` file.
+   byte-identical ``_result.txt`` files and no ``_pcl.bin`` file;
+8. one more looped run with ``nomaps nolog`` must give a byte-identical
+   ``<basenm>_results.txt`` and no per-pointing ``.out``,
+   ``_result.txt`` or ``_pcl.bin`` file.
 
 Exit status is 0 on PASS and 1 on FAIL.
 """
@@ -198,6 +201,19 @@ def main(argv=None):
         same = read_bytes(os.path.join(dn, basenm + "_results.txt")) == combined
         ok &= same
         print("%-8s nomaps %s_results.txt == looped" % ("ok" if same else "MISMATCH", basenm))
+
+        # 8. nomaps nolog: same combined _results.txt, no per-pointing file
+        dl = os.path.join(work, "nolog")
+        copy_inputs(case, dl)
+        shutil.copy(angles, dl)
+        t_nolog = run(binary, dl, ["illumina.in", basenm + ".out", "angles.txt", "nomaps", "nolog"], os.path.join(dl, "run.log"), args.timeout)
+        print("nomaps nolog looped run (%d pointings): %.2f s" % (len(POINTINGS), t_nolog))
+        same = read_bytes(os.path.join(dl, basenm + "_results.txt")) == combined
+        ok &= same
+        print("%-8s nolog %s_results.txt == looped" % ("ok" if same else "MISMATCH", basenm))
+        extra = [n for n in os.listdir(dl) if n.endswith((".out", "_result.txt", "_pcl.bin"))]
+        ok &= not extra
+        print("%-8s nolog wrote no per-pointing file%s" % ("ok" if not extra else "MISMATCH", "" if not extra else ": " + " ".join(extra)))
     finally:
         if args.keep:
             print("work directory kept:", work)
