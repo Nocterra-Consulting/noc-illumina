@@ -36,7 +36,7 @@ The check compares:
 The kernel accepts three optional positional arguments and, after the
 angles file, optional keywords in any order:
 
-    illumina [PARFILE [OUTFILE [ANGLES_FILE [maps|nomaps] [nolog]]]]
+    illumina [PARFILE [OUTFILE [ANGLES_FILE [maps|nomaps] [nolog] [ds2=CELL,RADIUS]]]]
 
 - `PARFILE`: the parameter file (default `illumina.in`).
 - `OUTFILE`: the output file name (default `<basenm>.out`, where
@@ -63,6 +63,12 @@ angles file, optional keywords in any order:
   results are the same. Meant for many-pointing runs on a shared file
   system (NALMP angle_loop); `run_angles.py` checks that `nomaps nolog`
   gives the same `_results.txt` and no per-pointing file.
+- `ds2=CELL,RADIUS`: the grid of the 2nd order scattering, in metres:
+  cells of CELL within RADIUS of the point midway between the source and
+  the line-of-sight voxel. Without the keyword the kernel uses 2500 m
+  cells within 40000 m. This keyword changes the results; it is meant
+  for convergence tests. RADIUS/CELL must be at most 89 (the size of
+  the grid array); other values stop the run with a message.
 
 All arguments are copied as is, so a path with `/`, a space or a
 comma works. The kernel prints the resolved file names and the number

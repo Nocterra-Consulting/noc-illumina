@@ -89,6 +89,7 @@ c
       integer wrmaps                                                      ! 1 = write the per-pointing contribution map (_pcl.bin), 0 = skip it
       integer wrlog                                                       ! 1 = write the per-pointing .out log and _result.txt, 0 = only <root>_results.txt
       integer iarg
+      real*8 ds2siz,ds2eff                                                ! ds2= keyword: 2nd scattering grid cell and radius (m), 0 = default
       character(maxnam) anglesfile                                        ! path of the angles list file (optional argument 3)
       character(maxnam) outroot                                           ! output name without the trailing '.out'
       character(maxnam) outfile                                           ! .out file of the current pointing
@@ -435,8 +436,12 @@ c 'maps' (default, write the per-pointing contribution map <root>_pcl.bin)
 c or 'nomaps' (skip it); 'nolog' (angle_loop: write only the combined
 c <root>_results.txt, no per-pointing .out log or _result.txt, and no
 c per-voxel printout; the results are the same).
+c 'ds2=<cell>,<radius>' (metres) replaces the 2nd order scattering grid
+c of 2500 m cells within 40000 m; this changes the results.
       wrmaps=1
       wrlog=1
+      ds2siz=0.
+      ds2eff=0.
       do iarg=4,iargc()
         call getarg(iarg,arg4)
         arg4=adjustl(arg4)
@@ -447,18 +452,28 @@ c per-voxel printout; the results are the same).
         elseif (arg4.eq.'nolog') then
           wrlog=0
           verbose=0
+        elseif (arg4(1:4).eq.'ds2=') then
+          read(arg4(5:),*,iostat=ios) ds2siz,ds2eff
+          if ((ios.ne.0).or.(ds2siz.le.0.).or.(ds2eff.le.0.).or.
+     +    (nint(ds2eff/ds2siz).gt.89)) then
+            print*,'Error: ds2= needs <cell>,<radius> in metres with',
+     +      ' radius/cell <= 89, got ',trim(arg4)
+            stop 1
+          endif
         else
-          print*,'Error: argument',iarg,' must be maps, nomaps or',
-     +    ' nolog, got ',trim(arg4)
+          print*,'Error: argument',iarg,' must be maps, nomaps,',
+     +    ' nolog or ds2=<cell>,<radius>, got ',trim(arg4)
           stop 1
         endif
       enddo
       dfov=(dfov*pi/180.)/2.
       siz=2500.
+      if (ds2siz.gt.0.) siz=ds2siz
       if (ssswit.eq.0) then
         effdif=0.
       else
         effdif=40000.
+        if (ds2eff.gt.0.) effdif=ds2eff
       endif
       scal=19.
       scalo=scal
