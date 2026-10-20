@@ -87,6 +87,8 @@ c
       character(maxnam) arg3                                              ! third CLI argument: angles list file
       character(maxnam) arg4                                              ! fourth CLI argument: 'maps' or 'nomaps'
       integer wrmaps                                                      ! 1 = write the per-pointing contribution map (_pcl.bin), 0 = skip it
+      integer wrlog                                                       ! 1 = write the per-pointing .out log and _result.txt, 0 = only <root>_results.txt
+      integer iarg
       character(maxnam) anglesfile                                        ! path of the angles list file (optional argument 3)
       character(maxnam) outroot                                           ! output name without the trailing '.out'
       character(maxnam) outfile                                           ! .out file of the current pointing
@@ -399,23 +401,29 @@ c second pass: store the pointings
           stop
         endif
       enddo
-c NEW CHANGE HERE: optional fourth argument 'maps' (default, write the
-c per-pointing contribution map <root>_pcl.bin) or 'nomaps' (skip it;
-c every other output is written).
+c NEW CHANGE HERE: optional keywords after the angles file, in any order:
+c 'maps' (default, write the per-pointing contribution map <root>_pcl.bin)
+c or 'nomaps' (skip it); 'nolog' (angle_loop: write only the combined
+c <root>_results.txt, no per-pointing .out log or _result.txt, and no
+c per-voxel printout; the results are the same).
       wrmaps=1
-      if (iargc().ge.4) then
-        call getarg(4,arg4)
+      wrlog=1
+      do iarg=4,iargc()
+        call getarg(iarg,arg4)
         arg4=adjustl(arg4)
         if (arg4.eq.'nomaps') then
           wrmaps=0
         elseif (arg4.eq.'maps') then
           wrmaps=1
+        elseif (arg4.eq.'nolog') then
+          wrlog=0
+          verbose=0
         else
-          print*,'Error: argument 4 must be maps or nomaps, got ',
-     +    trim(arg4)
+          print*,'Error: argument',iarg,' must be maps, nomaps or',
+     +    ' nolog, got ',trim(arg4)
           stop 1
         endif
-      endif
+      enddo
       dfov=(dfov*pi/180.)/2.
       siz=2500.
       if (ssswit.eq.0) then
@@ -845,8 +853,9 @@ c output file names of this pointing
         endif
         print*,'Pointing',ipt,' of',npts,': elevation',angvis,
      +  ' azimuth',azimgeo
-        print*,'Output file: ',trim(outfile)
-c opening output file
+        if (wrlog.eq.1) print*,'Output file: ',trim(outfile)
+c opening output file (nolog: the log goes to /dev/null, nothing is created)
+      if (wrlog.eq.0) outfile='/dev/null'
       open(unit=2,file=outfile,status='unknown')
         write(2,*) 'ILLUMINA version __version__'
         write(2,*) 'FILE USED:'
@@ -2216,6 +2225,7 @@ c =================================
 
         if (verbose.ge.1) print*,'======================================
      +==============='
+        if (wrlog.eq.1) then
         print*,'         Direct irradiance from sources (W/m**2/nm)'
         write(*,2001)  irdirect
         print*,'       Direct irradiance from reflexion (W/m**2/nm)'
@@ -2228,6 +2238,7 @@ c =================================
         write(*,2001) fctcld/omefov/(pi*(diamobj/2.)**2.)
         print*,'            Diffuse radiance (W/str/m**2/nm)'
         write(*,2001) (ftocap+fctcld)/omefov/(pi*(diamobj/2.)**2.)
+        endif
         if (verbose.ge.1) write(2,*) '==================================
      +================='
         write(2,*) '     Direct irradiance from sources (W/m**2/nm)'
@@ -2245,6 +2256,7 @@ c =================================
       close(2)
 c machine-readable result record of this pointing (<root>_result.txt or
 c <root>_e<elev>_a<azim>_result.txt) and the combined record (unit 4)
+      if (wrlog.eq.1) then
       open(unit=3,file=resfile,status='unknown')
         write(3,2002) 'elevation_deg',angvis
         write(3,2002) 'azimuth_deg',azimgeo
@@ -2258,6 +2270,7 @@ c <root>_e<elev>_a<azim>_result.txt) and the combined record (unit 4)
         write(3,2002) 'diffuse_radiance',
      +  (ftocap+fctcld)/omefov/(pi*(diamobj/2.)**2.)
       close(3)
+      endif
         if (ipt.gt.1) write(4,*)
         write(4,2002) 'elevation_deg',angvis
         write(4,2002) 'azimuth_deg',azimgeo
