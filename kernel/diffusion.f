@@ -38,6 +38,10 @@ c
       real*8 angdeg,tranam,tranaa,tranal
       real*8 altit,un,hlay,haer
       integer rang,na,naz
+      real*8 lgaa,k_lgaa,lgal,k_lgal,lgam,k_lgam
+      save lgaa,k_lgaa,lgal,k_lgal,lgam,k_lgam
+!$omp threadprivate(lgaa,k_lgaa,lgal,k_lgal,lgam,k_lgam)
+      data k_lgaa,k_lgal,k_lgam /-1.d0,-1.d0,-1.d0/
       parameter (pi=3.1415926)
 c--------------------------------------------------------      
       if (angdif.lt.0.) angdif=-angdif      
@@ -55,20 +59,38 @@ c  497(3), 2501-2516.
 c---------------------------------------- 
       if ((tranaa.le.1.).and.(tranaa.gt.0.)) then
          fonc_ae=fonc_a(rang)                                             ! value of the aerosol phase function
-         prob_a=(1.-dexp(dlog(tranaa)*dexp(-1.*altit/haer)*un/haer))*        ! Functions are normalized in the main code. See their division by 4pi
+c lgaa = dlog(tranaa), cached: the argument is constant for a run, and
+c dlog of the same argument gives the same value (results unchanged)
+         if (tranaa.ne.k_lgaa) then
+           lgaa=dlog(tranaa)
+           k_lgaa=tranaa
+         endif
+         prob_a=(1.-dexp(lgaa*dexp(-1.*altit/haer)*un/haer))*        ! Functions are normalized in the main code. See their division by 4pi
      +   secdif*fonc_ae
       else
          prob_a=0.
       endif      
       if ((tranal.le.1.).and.(tranal.gt.0.)) then
          fonc_le=fonc_l(rang)                                             ! value of the layer phase function
-         prob_l=(1.-dexp(dlog(tranal)*dexp(-1.*altit/hlay)*un/hlay))*           
+c lgal = dlog(tranal), cached: the argument is constant for a run, and
+c dlog of the same argument gives the same value (results unchanged)
+         if (tranal.ne.k_lgal) then
+           lgal=dlog(tranal)
+           k_lgal=tranal
+         endif
+         prob_l=(1.-dexp(lgal*dexp(-1.*altit/hlay)*un/hlay))*           
      +   secdil*fonc_le
       else
          prob_l=0.
       endif
       fctmol=0.75*(1.+((dcos(angdif))**2.))/(4.*pi)                        ! value of the molecule phase function
-      prob_m=(1.-dexp(dlog(tranam)*dexp(-1.*altit/8000.)*un/8000.))*
+c lgam = dlog(tranam), cached: the argument is constant for a run, and
+c dlog of the same argument gives the same value (results unchanged)
+      if (tranam.ne.k_lgam) then
+        lgam=dlog(tranam)
+        k_lgam=tranam
+      endif
+      prob_m=(1.-dexp(lgam*dexp(-1.*altit/8000.)*un/8000.))*
      +fctmol
 
       pdif = prob_a+prob_m+prob_l                                         ! This is an approximation valide if 1-transa,
