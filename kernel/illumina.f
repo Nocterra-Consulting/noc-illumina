@@ -1331,11 +1331,15 @@ c temporaire !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
           if ((fcapt.ge.ftocap/stoplim).and.(z_c.lt.cloudbase).and.       ! stop the calculation of the viewing line when the increment is lower than 1/stoplim
      +    (z_c.lt.35000.)) then                                           ! or when hitting a cloud or when z>40km (scattering probability =0 (given precision)
             fcapt=0.
+c FCA, ITC, ITT, FTC and lpluto only feed the contribution map: with
+c nomaps (prmaps=0) their full-domain sweeps are skipped
+            if (prmaps.eq.1) then
             do i=1,nbx
               do j=1,nby
                 FCA(i,j)=0.
               enddo
             enddo
+            endif
 c Calculate the solid angle of the line of sight voxel unit voxel
 c (1 m^3) given the fixed FOV of the observer.
 c For line of sight voxel near the observer
@@ -1356,11 +1360,13 @@ c computation of the Solid angle of the line of sight voxel seen from the observ
               portio=(omefov/omega)
             endif
             itotci=0.                                                     ! Initialisation of the contribution of the line of sight at the sensor level
+            if (prmaps.eq.1) then
             do i=1,nbx
               do j=1,nby
                 ITC(i,j)=0.
               enddo
             enddo
+            endif
             if( (rx_c.gt.real(nbx*dx)).or.(rx_c.lt.dx).or.                ! Condition line of sight inside the modelling domain
      +      (ry_c.gt.(nby*dy)).or.(ry_c.lt.dy)) then
             else
@@ -1395,11 +1401,13 @@ c beginning of the loop over the types of light sources
                   if (verbose.ge.1) write(2,*) ' Turning on lamps',
      +            stype
                   itotty=0.                                               ! Initialisation of the contribution of a source types to
+                  if (prmaps.eq.1) then
                   do x_s=1,nbx                                            ! the intensity toward the sensor by a line of sight voxel.
                     do y_s=1,nby
                       ITT(x_s,y_s,stype)=0.
                     enddo
                   enddo
+                  endif
 c OpenMP: the source cells of one line of sight voxel and one lamp
 c type are independent. itotty is the only scalar summed over the
 c cells; ITT(x_s,y_s,stype) is written once per iteration. icloud is a
@@ -1414,7 +1422,7 @@ c parameter and cannot appear in a clause.
 !$omp& z_c,rx_obs,ry_obs,z_obs,haer,hlay,tranam,tranaa,tranal,tabs,un,
 !$omp& secdif,secdil,fdifan,fdifl,omemax,omefov,portio,boxx,boxy,
 !$omp& reflsiz,srefl,effdif,zondif,ndiff,stepdi,siz,dss,cloudt,
-!$omp& cloudbase,iz,scal,verbose,ITT,icloud)
+!$omp& cloudbase,iz,scal,verbose,ITT,icloud,prmaps)
 !$omp& private(x_s,y_s,x_sr,y_sr,idi,na,naz,anglez,dirck,xsrmi,xsrma,
 !$omp& ysrmi,ysrma,x_dif,y_dif,id,jd,nss,ndi,rx_s,ry_s,z_s,rx_sr,ry_sr,
 !$omp& z_sr,rx_dif,ry_dif,z_dif,distd,dho,angzen,angazi,zhoriz,dh,hh,
@@ -2078,13 +2086,15 @@ c**********************************************************************
 c computation of the total intensity coming from all the sources of a given type
 c**********************************************************************
                             itotty=itotty+isourc                          ! Sum of the intensities all sources of the same typeand a given line of sight element
-                            ITT(x_s,y_s,stype)=ITT(x_s,y_s,stype)+isourc  ! ITT stores itotty in a matrix
+                            if (prmaps.eq.1) ITT(x_s,y_s,stype)=
+     +                      ITT(x_s,y_s,stype)+isourc                     ! ITT stores itotty in a matrix
                         endif                                             ! end of the condition "the luminosity of the ground pixel x_s,y_s in not null".
                       enddo                                               ! end the loop over the lines (latitude) of the domain (y_s).
                     enddo                                                 ! end the loop over the column (longitude) of the domain (x_s).
 !$omp end parallel do
 c end of the computation of the intensity of one source type
                     itotci=itotci+itotty                                  ! Sum of the intensities all source all type to a line of sight element
+                    if (prmaps.eq.1) then
                     do x_s=imin(stype),imax(stype)
                       do y_s=jmin(stype),jmax(stype)
                         ITC(x_s,y_s)=ITC(x_s,y_s)+ITT(x_s,y_s,stype)
@@ -2097,6 +2107,7 @@ c calculate total lamp flux matrix for all lamp types
      +                  lamplu(x_s,y_s,stype)
                       enddo
                     enddo
+                    endif
                   endif                                                   ! end of condition if there are any flux in that source type
               enddo                                                       ! end of the loop over the types of sources (stype).
 c end of the computation of the intensity coming from a line of sight voxel toward the sensor
@@ -2122,18 +2133,21 @@ c computation of the transmittance between the line of sight voxel and the obser
      +          distd,hlay,transl,tranal)
 c computation of the flux reaching the objective of the telescope from the line of sight voxel
                 fcapt=itotci*ometif*transa*transm*transl                         ! computation of the flux reaching the intrument from the line of sight voxel
+                if (prmaps.eq.1) then
                 do x_s=1,nbx
                   do y_s=1,nby
                     FCA(x_s,y_s)=ITC(x_s,y_s)*ometif*transa*transm*
      +              transl
                   enddo
                 enddo
+                endif
                 if (cos(pi-angzen).eq.0.) then
                   print*,'ERROR perfectly horizontal sight is forbidden'
                   stop
                 endif
 c end of the computation of the flux reaching the observer voxel from the line of sight voxel
                 ftocap=ftocap+fcapt                                       ! flux for all source all type all line of sight element
+                if (prmaps.eq.1) then
                 do x_s=1,nbx
                   do y_s=1,nby
                     FTC(x_s,y_s)=FTC(x_s,y_s)+FCA(x_s,y_s)                ! FTC is the array of the flux total at the sensor to identify
@@ -2141,6 +2155,7 @@ c end of the computation of the flux reaching the observer voxel from the line o
                                                                           ! The % is simply given by the ratio FTC/ftocap
                   enddo
                 enddo
+                endif
 c correction for the FOV to the flux reaching the intrument from the cloud voxel
             if (cloudt.ne.0) then
 c computation of the flux reaching the intrument from the cloud voxel
