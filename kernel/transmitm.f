@@ -40,6 +40,7 @@ c
       real*8 angz
       real*8 distd
       real*8 z_i,z_f,z1,z2
+      real*8 expzh,cosz
       real*8 lgtma,k_lgtma
       save lgtma,k_lgtma
 !$omp threadprivate(lgtma,k_lgtma)
@@ -58,10 +59,10 @@ c dlog of the same argument gives the same value (results unchanged)
         k_lgtma=tranam*tabs
       endif
       if (z1.ne.z2) then    
-        transm=dexp((lgtma/dabs(dcos(angz)))*(dexp(-1.*z1/
-     +  8000.)-dexp(-1.*z2/8000.)))
+        transm=dexp((lgtma/dabs(cosz(angz)))*(expzh(z1,8000.d0,1)-
+     +  expzh(z2,8000.d0,1)))
       else
-        transm=dexp((lgtma)*dexp(-1.*z1/8000.)*distd/8000.)
+        transm=dexp((lgtma)*expzh(z1,8000.d0,1)*distd/8000.)
       endif
       if (distd.eq.0.) transm=1.
       if ((transm.lt.0.).or.(transm.gt.1.)) then

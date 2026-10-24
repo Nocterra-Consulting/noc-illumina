@@ -37,6 +37,7 @@ c
       real*8 tranal                                                         ! vertical transmittance of the complete atmosphere (aerosols)
       real*8 angz,hlay
       real*8 z_i,z_f,z1,z2
+      real*8 expzh,cosz
       real*8 distd
       real*8 lgtal,k_lgtal
       save lgtal,k_lgtal
@@ -58,10 +59,10 @@ c dlog of the same argument gives the same value (results unchanged)
         k_lgtal=tranal
       endif
       if (z1.ne.z2) then    
-        transl=dexp((lgtal/dabs(dcos(angz)))*(dexp(-1.*z1/hlay)-
-     +  dexp(-1.*z2/hlay)))
+        transl=dexp((lgtal/dabs(cosz(angz)))*(expzh(z1,hlay,3)-
+     +  expzh(z2,hlay,3)))
       else
-        transl=dexp((lgtal)*dexp(-1.*z1/hlay)*distd/hlay)  
+        transl=dexp((lgtal)*expzh(z1,hlay,3)*distd/hlay)  
       endif
          if (transl.eq.0.) then
             print*,'ERREUR transl - no transmission',z_i,z_f,angz

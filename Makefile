@@ -52,7 +52,8 @@ KERNEL_SRCS := \
 	twodout.f \
 	transTOA.f \
 	curvature.f \
-	molabs.f
+	molabs.f \
+	expzh.f
 
 MAIN_SRC := $(BUILD)/illumina.f
 SRCS     := $(MAIN_SRC) $(addprefix $(KERNEL)/,$(KERNEL_SRCS))

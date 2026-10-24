@@ -39,6 +39,7 @@ c
       real*8 tranaa                                                         ! vertical transmittance of the complete atmosphere (aerosols)
       real*8 angz,haer
       real*8 z_i,z_f,z1,z2
+      real*8 expzh,cosz
       real*8 distd
       real*8 lgtaa,k_lgtaa
       save lgtaa,k_lgtaa
@@ -60,10 +61,10 @@ c dlog of the same argument gives the same value (results unchanged)
         k_lgtaa=tranaa
       endif
       if (z1.ne.z2) then    
-        transa=dexp((lgtaa/dabs(dcos(angz)))*(dexp(-1.*z1/haer)-
-     +  dexp(-1.*z2/haer)))
+        transa=dexp((lgtaa/dabs(cosz(angz)))*(expzh(z1,haer,2)-
+     +  expzh(z2,haer,2)))
       else
-        transa=dexp((lgtaa)*dexp(-1.*z1/haer)*distd/haer)  
+        transa=dexp((lgtaa)*expzh(z1,haer,2)*distd/haer)  
       endif
       if (distd.eq.0.) transa=1.
          if (transa.eq.0.) then

@@ -37,6 +37,7 @@ c
       real*8 fctmol,pi,fonc_a(181),fonc_l(181),fonc_ae,fonc_le
       real*8 angdeg,tranam,tranaa,tranal
       real*8 altit,un,hlay,haer
+      real*8 scatf
       integer rang,na,naz
       real*8 lgaa,k_lgaa,lgal,k_lgal,lgam,k_lgam
       save lgaa,k_lgaa,lgal,k_lgal,lgam,k_lgam
@@ -65,7 +66,7 @@ c dlog of the same argument gives the same value (results unchanged)
            lgaa=dlog(tranaa)
            k_lgaa=tranaa
          endif
-         prob_a=(1.-dexp(lgaa*dexp(-1.*altit/haer)*un/haer))*        ! Functions are normalized in the main code. See their division by 4pi
+         prob_a=scatf(altit,lgaa,un,haer,2)*        ! Functions are normalized in the main code. See their division by 4pi
      +   secdif*fonc_ae
       else
          prob_a=0.
@@ -78,7 +79,7 @@ c dlog of the same argument gives the same value (results unchanged)
            lgal=dlog(tranal)
            k_lgal=tranal
          endif
-         prob_l=(1.-dexp(lgal*dexp(-1.*altit/hlay)*un/hlay))*           
+         prob_l=scatf(altit,lgal,un,hlay,3)*           
      +   secdil*fonc_le
       else
          prob_l=0.
@@ -90,7 +91,7 @@ c dlog of the same argument gives the same value (results unchanged)
         lgam=dlog(tranam)
         k_lgam=tranam
       endif
-      prob_m=(1.-dexp(lgam*dexp(-1.*altit/8000.)*un/8000.))*
+      prob_m=scatf(altit,lgam,un,8000.d0,1)*
      +fctmol
 
       pdif = prob_a+prob_m+prob_l                                         ! This is an approximation valide if 1-transa,
