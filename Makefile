@@ -4,6 +4,11 @@
 #   all     (default) release build -> bin/illumina, bin/continue_illumina
 #   debug   checked build           -> bin/illumina_debug
 #   openmp  release build + OpenMP  -> bin/illumina_omp
+#   pgo     release build with link-time and profile-guided optimisation
+#           -> bin/illumina, bin/continue_illumina; the profile comes
+#           from a short synthetic run (about 4 s). The results are the
+#           same as the release build (checked with gfortran 13 and 14);
+#           run "make test" after it on a new compiler.
 #   test    build "all", then run the synthetic regression harness
 #           (case_small, case_hill, case_cloud_hill, case_cloud_2nd)
 #           (also runs test-omp when bin/illumina_omp exists)
@@ -58,7 +63,7 @@ KERNEL_SRCS := \
 MAIN_SRC := $(BUILD)/illumina.f
 SRCS     := $(MAIN_SRC) $(addprefix $(KERNEL)/,$(KERNEL_SRCS))
 
-.PHONY: all debug openmp test test-omp clean
+.PHONY: all debug openmp pgo test test-omp clean
 
 all: $(BIN)/illumina $(BIN)/continue_illumina
 
@@ -81,6 +86,18 @@ $(BIN)/illumina_debug: $(SRCS) | $(BIN)
 
 $(BIN)/illumina_omp: $(SRCS) | $(BIN)
 	$(FC) $(OMPFLAGS) $(SRCS) -o $@
+
+# The profile file names follow the output path, so both passes write
+# $(BIN)/illumina.
+PGO_DIR  := $(abspath $(BUILD)/pgo)
+PGO_CASE := $(BUILD)/pgo_case
+pgo: $(SRCS) $(BIN)/continue_illumina | $(BIN)
+	rm -rf $(PGO_DIR) $(PGO_CASE)
+	$(FC) $(FFLAGS) -flto=auto -fprofile-generate=$(PGO_DIR) $(SRCS) -o $(BIN)/illumina
+	$(PYTHON) tests/regression/make_case.py --out $(PGO_CASE) --size 101 --dx 50 --hill 150 600 1200 800 --hill-lamps > /dev/null
+	printf '10 30\n30 120\n60 250\n5 300\n' > $(PGO_CASE)/angles.txt
+	cd $(PGO_CASE) && $(abspath $(BIN))/illumina illumina.in synth angles.txt nomaps nolog > /dev/null
+	$(FC) $(FFLAGS) -flto=auto -fprofile-use=$(PGO_DIR) -fprofile-partial-training $(SRCS) -o $(BIN)/illumina
 
 $(BIN)/continue_illumina: $(KERNEL)/continue_illumina.f | $(BIN)
 	$(FC) $< -o $@
